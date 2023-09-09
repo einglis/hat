@@ -1,5 +1,6 @@
 
 #include <Adafruit_NeoPixel.h>
+#include "button.h"
 
 namespace outputs {
   enum {
@@ -17,20 +18,14 @@ namespace inputs {
 }
 
 #define LED_COUNT 59 // really 60, but the last one is mostly hidden
+#define LED_BRIGTNESS 64 // full brightness (255) is: a) too much and b) will kill the battery/MCU
 
 Adafruit_NeoPixel strip( LED_COUNT, outputs::pixels_pin, NEO_GRB + NEO_KHZ800 );
+ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
 
+// ----------------------------------------------------------------------------
 
-void myISR() 
-{
-  int button = digitalRead(7);
-  digitalWrite(1, button);
-  Serial.println(button);
-}
-
-// setup() function -- runs once at startup --------------------------------
-
-void setup() 
+void setup()
 {
   Serial.begin(115200);
   Serial.println("");
@@ -49,16 +44,26 @@ void setup()
   digitalWrite( outputs::pixels_en_pin, LOW ); // pixels off
   digitalWrite( outputs::button_en_pin, HIGH ); // needed to recognise presses
 
+  strip.begin();
+  strip.setBrightness( LED_BRIGTNESS );
+  strip.show();
 
-  strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
-  strip.show();            // Turn OFF all pixels ASAP
-  strip.setBrightness(64); // Set BRIGHTNESS to about 1/5 (max = 255)
-  //strip.setBrightness(255); // Set BRIGHTNESS to about 1/5 (max = 255)
-
-
-  attachInterrupt(digitalPinToInterrupt(7), myISR, CHANGE);
+  button.begin( button_fn );
 }
 
+
+
+
+//void button_fn ( ButtonInput::Event e, int count );
+void button_fn ( ButtonInput::Event e, int count )
+{
+  static int on = 0;
+
+  if (e == ButtonInput::HoldShort)
+    on = !on;
+
+  digitalWrite( outputs::pixels_en_pin, on );
+}
 
 // loop() function -- runs repeatedly as long as board is on ---------------
 
@@ -178,7 +183,7 @@ void rainbow(int wait, int percent) {
     // strip.rainbow(firstPixelHue, 1, 255, 255, true);
 
     for (int i = 0; i < LED_COUNT; i++) {
-//      strip.setPixelColor(i, strip.getPixelColor(i)&0xff); // blue 
+//      strip.setPixelColor(i, strip.getPixelColor(i)&0xff); // blue
 //    strip.setPixelColor(i, strip.getPixelColor(i)&0xff00); // green
 //      strip.setPixelColor(i, strip.getPixelColor(i)&0xff0000); // red
  //       strip.setPixelColor(i, (strip.getPixelColor(i)&0xff)*0x10101); // white
@@ -186,11 +191,11 @@ void rainbow(int wait, int percent) {
   }
 
     for (int i = percent*LED_COUNT/100; i < LED_COUNT; i++) {
-      strip.setPixelColor(i, 0); 
+      strip.setPixelColor(i, 0);
       break;
     }
 
-  
+
 
 
 if (0)
@@ -205,7 +210,7 @@ if (0)
     strip.setPixelColor(7, 0x000400); // green on right
     strip.setPixelColor(8, 0x000200); // green on right
     strip.setPixelColor(9, 0x000100); // green on right
-        
+
     strip.setPixelColor(LED_COUNT-1, 0xff0000); // red on left
     strip.setPixelColor(LED_COUNT-2, 0xff0000); // red on left
     strip.setPixelColor(LED_COUNT-3, 0x800000); // red on left

@@ -4,17 +4,11 @@
 
 #include <Ticker.h>
 
-namespace node {
 
 class DebouncedInput
 {
 public:
   virtual ~DebouncedInput( ) { }
-
-  void update_debounce_ms( int debounce_ms )
-  {
-    max_count = debounce_ms;
-  }
 
 protected:
   DebouncedInput( std::function<int()> input_fn_, int debounce_ms )
@@ -33,7 +27,12 @@ protected:
 
   void begin()
   {
-    ticker.attach_ms( 1, [this](){ poll(); } );
+    ticker.attach_ms( 1, poll_, this );
+  }
+
+  static void poll_( DebouncedInput* self ) // faff, because the ESP32 Ticker does not seem to like lambdas
+  {
+    self->poll();
   }
 
   virtual void poll( )
@@ -44,7 +43,7 @@ protected:
     else if (!in && count > 0)
       --count;
 
-    if ((state == 0 && count == max_count) 
+    if ((state == 0 && count == max_count)
       || (state == 1 && count == 0))
     {
       state = !state;
@@ -53,7 +52,7 @@ protected:
   }
 
   int state;
-  virtual void new_state( ) = 0; 
+  virtual void new_state( ) = 0;
 
 private:
   int count;
@@ -64,7 +63,7 @@ private:
 
 // ----------------------------------------------------------------------------
 
-class ButtonInput 
+class ButtonInput
   : public DebouncedInput
 {
 public:
@@ -83,8 +82,8 @@ public:
   }
 
 private:
-  virtual void new_state( ) 
-  { 
+  virtual void new_state( )
+  {
     if (state) // button up -> down
       event( Press, ++count );
     timer = 0;
@@ -125,56 +124,3 @@ private:
   int timer; // aka hold_time when button is down; recent_time when up
   std::function< void( Event, int ) > event;
 };
-
-// ----------------------------------------------------------------------------
-
-class SwitchInput 
-  : public DebouncedInput
-{
-public:
-  SwitchInput( std::function<int()> input_fn )
-    : DebouncedInput{ input_fn, debounce_ms }
-    , count{ 0 }
-    , timer{ 0 }
-    { }
-
-  enum Event{ FlipOpen = 1, FlipClose, Final };
-
- void begin( std::function<void( Event, int )> fn )
-  {
-    event = fn;
-    DebouncedInput::begin();
-  }
-
-private:
-  virtual void new_state( )
-  {
-    event( (state) ? FlipClose : FlipOpen, ++count );
-    timer = 0;
-  }
-
-  virtual void poll( )
-  {
-    DebouncedInput::poll( );
-
-    if (timer < std::numeric_limits<decltype(timer)>::max()) timer++;
-      // don't overflow even if nothing happens for a while
-
-    if (timer == recent_flip_ms)
-    {
-      event( Final, count );
-      count = 0;
-    }
-  }
-
-  enum {
-    debounce_ms = 20,
-    recent_flip_ms = 600,
-  };
-
-  int count;
-  int timer; // aka recent_time
-  std::function< void( Event, int ) > event;
-};
-
-} // node
