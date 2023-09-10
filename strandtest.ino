@@ -1,5 +1,7 @@
 
 #include <Adafruit_NeoPixel.h>
+#include <vector>
+
 #include "button.h"
 
 namespace outputs {
@@ -17,11 +19,39 @@ namespace inputs {
   };
 }
 
-#define LED_COUNT 59 // really 60, but the last one is mostly hidden
-#define LED_BRIGTNESS 64 // full brightness (255) is: a) too much and b) will kill the battery/MCU
+#define NUM_PIXELS 59 // really 60, but the last one is mostly hidden
+#define PIXEL_BRIGHTNESS 64 // full brightness (255) is: a) too much and b) will kill the battery/MCU
 
-Adafruit_NeoPixel strip( LED_COUNT, outputs::pixels_pin, NEO_GRB + NEO_KHZ800 );
+Adafruit_NeoPixel strip( NUM_PIXELS, outputs::pixels_pin, NEO_GRB + NEO_KHZ800 );
 ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
+
+// ----------------------------------------------------------------------------
+
+#include "pixel_pattern.h"
+static std::vector< PixelPattern* >pixel_patterns;
+
+#include "pixel_patterns/rainbows.h"
+CycleRainbowPattern rainbow1;
+MonoRainbowPattern rainbow2;
+
+#include "pixel_patterns/colour_random.h"
+ColourRandomPattern random_colours;
+
+#include "pixel_patterns/snakes.h"
+SnakesPattern snakes( NUM_PIXELS );
+
+#include "pixel_patterns/sparkle.h"
+SparklePattern sparkle_white;
+SparklePattern sparkle_red( 0x010000 );
+SparklePattern sparkle_yellow( 0x010100 );
+
+Ticker pixel_ticker;
+void pixel_ticker_fn( )
+{
+  bool need_update = pixels_update( strip );
+  if (need_update)
+    strip.show();
+}
 
 // ----------------------------------------------------------------------------
 
@@ -45,10 +75,21 @@ void setup()
   digitalWrite( outputs::button_en_pin, HIGH ); // needed to recognise presses
 
   strip.begin();
-  strip.setBrightness( LED_BRIGTNESS );
+  strip.setBrightness( PIXEL_BRIGHTNESS );
   strip.show();
 
   button.begin( button_fn );
+
+
+  pixel_patterns.push_back( &rainbow1 );
+  pixel_patterns.push_back( &rainbow2 );
+  pixel_patterns.push_back( &snakes );
+  pixel_patterns.push_back( &random_colours );
+  pixel_patterns.push_back( &sparkle_white );
+  pixel_patterns.push_back( &sparkle_red );
+  pixel_patterns.push_back( &sparkle_yellow );
+
+  pixel_ticker.attach_ms( 20, pixel_ticker_fn );
 }
 
 
@@ -61,6 +102,8 @@ void button_fn ( ButtonInput::Event e, int count )
 
   if (e == ButtonInput::HoldShort)
     on = !on;
+  else if (e == ButtonInput::Press)
+    cycle_pattern();
 
   digitalWrite( outputs::pixels_en_pin, on );
 }
@@ -68,6 +111,7 @@ void button_fn ( ButtonInput::Event e, int count )
 // loop() function -- runs repeatedly as long as board is on ---------------
 
 void loop() {
+  return;
   // Fill along the length of the strip in various colors...
 //  colorWipe(strip.Color(255,   0,   0), 50); // Red
 //  colorWipe(strip.Color(  0, 255,   0), 50); // Green
@@ -182,7 +226,7 @@ void rainbow(int wait, int percent) {
     // Above line is equivalent to:
     // strip.rainbow(firstPixelHue, 1, 255, 255, true);
 
-    for (int i = 0; i < LED_COUNT; i++) {
+    for (int i = 0; i < NUM_PIXELS; i++) {
 //      strip.setPixelColor(i, strip.getPixelColor(i)&0xff); // blue
 //    strip.setPixelColor(i, strip.getPixelColor(i)&0xff00); // green
 //      strip.setPixelColor(i, strip.getPixelColor(i)&0xff0000); // red
@@ -190,7 +234,7 @@ void rainbow(int wait, int percent) {
 //        strip.setPixelColor(i, (strip.getPixelColor(0)&0xff)*0x10101); // solid white
   }
 
-    for (int i = percent*LED_COUNT/100; i < LED_COUNT; i++) {
+    for (int i = percent*NUM_PIXELS/100; i < NUM_PIXELS; i++) {
       strip.setPixelColor(i, 0);
       break;
     }
@@ -211,16 +255,16 @@ if (0)
     strip.setPixelColor(8, 0x000200); // green on right
     strip.setPixelColor(9, 0x000100); // green on right
 
-    strip.setPixelColor(LED_COUNT-1, 0xff0000); // red on left
-    strip.setPixelColor(LED_COUNT-2, 0xff0000); // red on left
-    strip.setPixelColor(LED_COUNT-3, 0x800000); // red on left
-    strip.setPixelColor(LED_COUNT-4, 0x400000); // red on left
-    strip.setPixelColor(LED_COUNT-5, 0x200000); // red on left
-    strip.setPixelColor(LED_COUNT-6, 0x100000); // red on left
-    strip.setPixelColor(LED_COUNT-7, 0x080000); // red on left
-    strip.setPixelColor(LED_COUNT-8, 0x040000); // red on left
-    strip.setPixelColor(LED_COUNT-9, 0x020000); // red on left
-    strip.setPixelColor(LED_COUNT-10, 0x010000); // red on left
+    strip.setPixelColor(NUM_PIXELS-1, 0xff0000); // red on left
+    strip.setPixelColor(NUM_PIXELS-2, 0xff0000); // red on left
+    strip.setPixelColor(NUM_PIXELS-3, 0x800000); // red on left
+    strip.setPixelColor(NUM_PIXELS-4, 0x400000); // red on left
+    strip.setPixelColor(NUM_PIXELS-5, 0x200000); // red on left
+    strip.setPixelColor(NUM_PIXELS-6, 0x100000); // red on left
+    strip.setPixelColor(NUM_PIXELS-7, 0x080000); // red on left
+    strip.setPixelColor(NUM_PIXELS-8, 0x040000); // red on left
+    strip.setPixelColor(NUM_PIXELS-9, 0x020000); // red on left
+    strip.setPixelColor(NUM_PIXELS-10, 0x010000); // red on left
 }
     strip.show(); // Update strip with new contents
     delay(wait);  // Pause for a moment

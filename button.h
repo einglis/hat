@@ -1,9 +1,9 @@
 #pragma once
-
 // NOTE: hideously copied from Simple Node and thence hacked.
 
 #include <Ticker.h>
 
+// ----------------------------------------------------------------------------
 
 class DebouncedInput
 {
