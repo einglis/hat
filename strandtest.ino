@@ -6,12 +6,12 @@
 
 namespace outputs {
   enum {
-    status_pin = LED_BUILTIN,
+    status_pin = LED_BUILTIN, // 10
     pixels_pin = 0,
     pixels_en_pin = 1,
     button_en_pin = 5,
-    mic_gnd_pin = 8,
-    mic_vdd_pin = 9, // aka mic_en_pin
+    mic_vdd_pin = 9,
+    mic_gnd_pin = 8, // remove 10k pullup
   };
 }
 namespace inputs {
@@ -82,13 +82,14 @@ void setup()
   pinMode( outputs::mic_vdd_pin, OUTPUT );
   pinMode( inputs::mic_pin, INPUT );
 
-  digitalWrite( outputs::mic_gnd_pin, LOW ); // using GPOIs as power rails
-  digitalWrite( outputs::mic_vdd_pin, LOW ); // but off to start with
+  digitalWrite( outputs::mic_vdd_pin, LOW ); // using GPOIs as power rails
+  digitalWrite( outputs::mic_gnd_pin, LOW );
   adcAttachPin( inputs::mic_pin );
 
 
   strip.begin();
   strip.setBrightness( PIXEL_BRIGHTNESS );
+  strip.clear();
   strip.show();
 
   button.begin( button_fn );
@@ -127,6 +128,9 @@ void button_fn ( ButtonInput::Event e, int count )
 void loop() {
   int adc_raw = analogRead( inputs::mic_pin );
   Serial.println(adc_raw);
+    // this println kills uploads?!
+
+  delay( 100 ); // seems to make programming more reliable.
 
   return;
   // Fill along the length of the strip in various colors...
