@@ -14,6 +14,7 @@ https://www.youtube.com/watch?v=0iEVzUgQieM&t=667s
 * **Adafruit** Lithium Ion Polymer Battery - 3.7v 500mAh
   * https://www.adafruit.com/product/1578
 * IRF520N N-Channel MOSFET
-
+* **Amazon** Baseball Cap - Plain Cap Hat Lightweight Adjustable Washed Polo Style Hat
+  * https://www.amazon.co.uk/dp/B087BQ5V7Z
 ### HW mods
 [![hw mods](./resources/board_mods_sm.png)](./resources/board_mods.png)
