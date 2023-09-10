@@ -7,15 +7,18 @@
 namespace outputs {
   enum {
     status_pin = LED_BUILTIN,
-    pixels_pin    = 0,
+    pixels_pin = 0,
     pixels_en_pin = 1,
     button_en_pin = 5,
+    mic_gnd_pin = 8,
+    mic_vdd_pin = 9, // aka mic_en_pin
   };
 }
 namespace inputs {
   enum {
     button_pin = 7,
     vsense_pin = A3,
+    mic_pin = A2,
   };
 }
 
@@ -62,17 +65,27 @@ void setup()
   Serial.println("");
   Serial.println("Hat's hat!");
 
-  pinMode( inputs::button_pin, INPUT_PULLDOWN );
+  pinMode( outputs::status_pin, OUTPUT );
+
   pinMode( inputs::vsense_pin, INPUT );
   adcAttachPin( inputs::vsense_pin );
 
-  pinMode( outputs::status_pin, OUTPUT );
   pinMode( outputs::pixels_pin, OUTPUT );
   pinMode( outputs::pixels_en_pin, OUTPUT );
-  pinMode( outputs::button_en_pin, OUTPUT );
-
   digitalWrite( outputs::pixels_en_pin, LOW ); // pixels off
+
+  pinMode( inputs::button_pin, INPUT_PULLDOWN );
+  pinMode( outputs::button_en_pin, OUTPUT );
   digitalWrite( outputs::button_en_pin, HIGH ); // needed to recognise presses
+
+  pinMode( outputs::mic_gnd_pin, OUTPUT );
+  pinMode( outputs::mic_vdd_pin, OUTPUT );
+  pinMode( inputs::mic_pin, INPUT );
+
+  digitalWrite( outputs::mic_gnd_pin, LOW ); // using GPOIs as power rails
+  digitalWrite( outputs::mic_vdd_pin, LOW ); // but off to start with
+  adcAttachPin( inputs::mic_pin );
+
 
   strip.begin();
   strip.setBrightness( PIXEL_BRIGHTNESS );
@@ -84,10 +97,10 @@ void setup()
   pixel_patterns.push_back( &rainbow1 );
   pixel_patterns.push_back( &rainbow2 );
   pixel_patterns.push_back( &snakes );
-  pixel_patterns.push_back( &random_colours );
-  pixel_patterns.push_back( &sparkle_white );
+//pixel_patterns.push_back( &random_colours );
+//pixel_patterns.push_back( &sparkle_white );
   pixel_patterns.push_back( &sparkle_red );
-  pixel_patterns.push_back( &sparkle_yellow );
+//pixel_patterns.push_back( &sparkle_yellow );
 
   pixel_ticker.attach_ms( 20, pixel_ticker_fn );
 }
@@ -106,11 +119,15 @@ void button_fn ( ButtonInput::Event e, int count )
     cycle_pattern();
 
   digitalWrite( outputs::pixels_en_pin, on );
+  digitalWrite( outputs::mic_vdd_pin, on );
 }
 
 // loop() function -- runs repeatedly as long as board is on ---------------
 
 void loop() {
+  int adc_raw = analogRead( inputs::mic_pin );
+  Serial.println(adc_raw);
+
   return;
   // Fill along the length of the strip in various colors...
 //  colorWipe(strip.Color(255,   0,   0), 50); // Red
@@ -127,7 +144,7 @@ void loop() {
  // Serial.println(digitalRead(5));
   //igitalWrite(1, HIGH); // turn on always
 
-  int adc_raw = analogRead(A3);
+  adc_raw = analogRead( inputs::vsense_pin );
   Serial.print(adc_raw);
   Serial.print(", ");
 
