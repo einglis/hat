@@ -3,8 +3,8 @@
 #include <arduinoFFT.h>
 #include "../pixel_pattern.h"
 
-#define SAMPLES         128   // Must be a power of 2. Don't use sample 0 and only first SAMPLES/2 are usable.
-#define SAMPLING_FREQ   40000 // Hz, must be 40000 or less due to ADC conversion time.
+#define SAMPLES         64   // Must be a power of 2. Don't use sample 0 and only first SAMPLES/2 are usable.
+#define SAMPLING_FREQ   80000 // Hz, must be 40000 or less due to ADC conversion time.
 #define NOISE           500   // Used as a crude noise filter, values below this are ignored
 
 class FFTPattern : public PixelPattern
@@ -29,7 +29,7 @@ public:
     //digitalWrite( en_pin, LOW );
   }
 
-  virtual void advance( int /*inc*/ ) 
+  virtual void advance2( int /*inc*/ ) 
   { 
     static int k = 0;
     k++;
@@ -39,14 +39,14 @@ public:
       k = 0;
     }
 
-    unsigned int sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQ));
+    //  unsigned int sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQ));
 
     for (auto i = 0; i < SAMPLES; i++) 
     {
       newTime = micros();
       vReal[i] = analogRead( mic_pin ); // A conversion takes about 9.7uS on an ESP32
       vImag[i] = 0;
-      while ((micros() - newTime) < sampling_period_us) { /* chill */ }
+      //while ((micros() - newTime) < sampling_period_us) { /* chill */ }
     }
 
     float sum = 0.0;
@@ -118,6 +118,19 @@ public:
     // fft.Windowing( FFT_WIN_TYP_HAMMING, FFT_FORWARD );
     // fft.Compute( FFT_FORWARD );
     // fft.ComplexToMagnitude();
+  }
+
+ virtual void advance( int /*inc*/ ) 
+  { 
+    static int k = 0;
+    k++;
+    if (k == 1000)
+    {
+      Serial.println("leds 1k");
+      k = 0;
+    }
+
+    vu2 = global_vu;// / 100;
   }
 
   virtual uint32_t pixel( unsigned int i ) 

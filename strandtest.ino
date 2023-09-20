@@ -30,6 +30,9 @@ ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
 
 // ----------------------------------------------------------------------------
 
+int global_vu;
+
+
 #include "pixel_pattern.h"
 static std::vector< PixelPattern* >pixel_patterns;
 
@@ -47,6 +50,11 @@ SnakesPattern snakes( NUM_PIXELS );
 SparklePattern sparkle_white;
 SparklePattern sparkle_red( 0x010000 );
 SparklePattern sparkle_yellow( 0x010100 );
+
+#include "pixel_patterns/fft.h"
+FFTPattern fft_basic( outputs::mic_vdd_pin, inputs::mic_pin );
+
+// ------------------------------------
 
 Ticker pixel_ticker;
 void pixel_ticker_fn( )
@@ -72,7 +80,7 @@ void setup()
 
   pinMode( outputs::pixels_pin, OUTPUT );
   pinMode( outputs::pixels_en_pin, OUTPUT );
-  digitalWrite( outputs::pixels_en_pin, LOW ); // pixels off
+  digitalWrite( outputs::pixels_en_pin, HIGH ); // pixels off
 
   pinMode( inputs::button_pin, INPUT_PULLDOWN );
   pinMode( outputs::button_en_pin, OUTPUT );
@@ -82,7 +90,7 @@ void setup()
   pinMode( outputs::mic_vdd_pin, OUTPUT );
   pinMode( inputs::mic_pin, INPUT );
 
-  digitalWrite( outputs::mic_vdd_pin, LOW ); // using GPOIs as power rails
+  digitalWrite( outputs::mic_vdd_pin, HIGH ); // using GPOIs as power rails
   digitalWrite( outputs::mic_gnd_pin, LOW );
   adcAttachPin( inputs::mic_pin );
 
@@ -92,21 +100,90 @@ void setup()
   strip.clear();
   strip.show();
 
-  button.begin( button_fn );
+  //button.begin( button_fn );
 
 
-  pixel_patterns.push_back( &rainbow1 );
-  pixel_patterns.push_back( &rainbow2 );
-  pixel_patterns.push_back( &snakes );
+//  pixel_patterns.push_back( &rainbow1 );
+//  pixel_patterns.push_back( &rainbow2 );
+//  pixel_patterns.push_back( &snakes );
 //pixel_patterns.push_back( &random_colours );
 //pixel_patterns.push_back( &sparkle_white );
-  pixel_patterns.push_back( &sparkle_red );
+//  pixel_patterns.push_back( &sparkle_red );
 //pixel_patterns.push_back( &sparkle_yellow );
+  pixel_patterns.push_back( &fft_basic );
 
-  pixel_ticker.attach_ms( 20, pixel_ticker_fn );
+  pixel_ticker.attach_ms( 10, pixel_ticker_fn );
+
+  Serial.print("loop() running on core ");
+  Serial.println(xPortGetCoreID());
+
+  start_vu_task( );
 }
 
 
+#include <driver/adc.h>
+#include <driver/i2s.h>
+#include "esp32_audio/ADCSampler.h"
+
+i2s_config_t adcI2SConfig = {
+    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
+    .sample_rate = 16000,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+    .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+    .communication_format = I2S_COMM_FORMAT_I2S_LSB,
+    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+    .dma_buf_count = 4,
+    .dma_buf_len = 1024,
+    .use_apll = false,
+    .tx_desc_auto_clear = false,
+    .fixed_mclk = 0};
+
+
+
+TaskHandle_t vu_task;
+void vu_task_fn( void* vu_x ) 
+{
+  Serial.print("vu_task_fn() running on core ");
+  Serial.println(xPortGetCoreID());
+
+  int k = 0;
+  while (1)
+  {
+    k++;
+    if (k == 10)
+    {
+      Serial.println("task 1k");
+      k = 0;
+    }
+
+    #define SAMPLES 64
+
+    //float sum = 0.0;
+    for (auto i = 0; i < SAMPLES; i++) 
+    {
+      //auto newTime = micros();
+
+      int x = analogRead( inputs::mic_pin ); // just read asap
+      (void)x;
+      //sum += x * x;
+      //while ((micros() - newTime) < 20) { /* chill */ }
+    }
+
+    //int vu = sqrt( sum / SAMPLES );
+    *((int *)vu_x) = k;//vu;
+  }
+}
+
+void start_vu_task( )
+{
+  xTaskCreatePinnedToCore( vu_task_fn, "VU sampling",
+    10000,  /* stack size in words */
+    (void *)&global_vu,   /* context */
+    0,      /* priority */
+    &vu_task,
+    0       /* core */
+  );
+}
 
 
 //void button_fn ( ButtonInput::Event e, int count );
@@ -126,6 +203,8 @@ void button_fn ( ButtonInput::Event e, int count )
 // loop() function -- runs repeatedly as long as board is on ---------------
 
 void loop() {
+  //pixel_ticker_fn();
+  return;
   int adc_raw = analogRead( inputs::mic_pin );
   Serial.println(adc_raw);
     // this println kills uploads?!
