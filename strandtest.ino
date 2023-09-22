@@ -6,19 +6,17 @@
 
 namespace outputs {
   enum {
-    status_pin = LED_BUILTIN, // 10
-    pixels_pin = 0,
-    pixels_en_pin = 1,
-    button_en_pin = 5,
-    mic_vdd_pin = 9,
-    mic_gnd_pin = 8, // remove 10k pullup
+    pixels_pin = 4,
+    pixels_en_pin = 14,
+    button_en_pin = 15,
+    mic_vdd_pin = 21,
+    mic_gnd_pin = 22
   };
 }
 namespace inputs {
   enum {
-    button_pin = 7,
-    vsense_pin = A3,
-    mic_pin = A2,
+    button_pin = 27,
+    mic_pin = A4,
   };
 }
 
@@ -72,11 +70,6 @@ void setup()
   Serial.println("");
   Serial.println("");
   Serial.println("Hat's hat!");
-
-  pinMode( outputs::status_pin, OUTPUT );
-
-  pinMode( inputs::vsense_pin, INPUT );
-  adcAttachPin( inputs::vsense_pin );
 
   pinMode( outputs::pixels_pin, OUTPUT );
   pinMode( outputs::pixels_en_pin, OUTPUT );
@@ -212,6 +205,7 @@ void loop() {
   delay( 100 ); // seems to make programming more reliable.
 
   return;
+#if 0
   // Fill along the length of the strip in various colors...
 //  colorWipe(strip.Color(255,   0,   0), 50); // Red
 //  colorWipe(strip.Color(  0, 255,   0), 50); // Green
@@ -275,6 +269,7 @@ gpio_reset_pin(GPIO_NUM_9);
 
     esp_deep_sleep_start();
   }
+#endif
 }
 
 
