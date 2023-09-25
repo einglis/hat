@@ -85,7 +85,7 @@ void setup()
 
   digitalWrite( outputs::mic_vdd_pin, HIGH ); // using GPOIs as power rails
   digitalWrite( outputs::mic_gnd_pin, LOW );
-  adcAttachPin( inputs::mic_pin );
+  //adcAttachPin( inputs::mic_pin );
 
 
   strip.begin();
@@ -93,7 +93,7 @@ void setup()
   strip.clear();
   strip.show();
 
-  //button.begin( button_fn );
+  button.begin( button_fn );
 
 
 //  pixel_patterns.push_back( &rainbow1 );
@@ -114,36 +114,219 @@ void setup()
 }
 
 
-#include <driver/adc.h>
-#include <driver/i2s.h>
-#include "esp32_audio/ADCSampler.h"
+//#include <driver/adc.h>
+//#include <driver/i2s.h>
+//#include "esp32_audio/ADCSampler.h"
 
-i2s_config_t adcI2SConfig = {
-    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-    .sample_rate = 16000,
-    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-    .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
-    .communication_format = I2S_COMM_FORMAT_I2S_LSB,
-    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count = 4,
-    .dma_buf_len = 1024,
-    .use_apll = false,
-    .tx_desc_auto_clear = false,
-    .fixed_mclk = 0};
+//#include <arduino_audio_tools/src/AnalogAudio.h>
+#include <AudioTools.h>
+
+#if 0
+
+AudioInfo info(44100, 2, 16);
+AnalogAudioStream in;
+I2SStream out;
+StreamCopy copier(out, in); // copy in to out
+
+// Arduino Setup
+void setup(void) {
+  Serial.begin(115200);
+  AudioLogger::instance().begin(Serial, AudioLogger::Info);
+
+  // RX automatically uses port 0 with pin GPIO34
+  auto cfgRx = in.defaultConfig(RX_MODE);
+  cfgRx.copyFrom(info);
+  in.begin(cfgRx);
+
+  // TX on I2S_NUM_1
+  auto cfgTx = out.defaultConfig(TX_MODE);
+  cfgTx.port_no = 1;
+  cfgTx.copyFrom(info);
+  out.begin(cfgTx);
+}
+
+// Arduino loop - copy data
+void loop() {
+  copier.copy();
+}
+#endif
+
+//AudioInfo info(44100, 2, 16);
+AnalogAudioStream in;
 
 
 
 TaskHandle_t vu_task;
-void vu_task_fn( void* vu_x ) 
+void vu_task_fn( void* vu_x )
 {
   Serial.print("vu_task_fn() running on core ");
   Serial.println(xPortGetCoreID());
 
-  int k = 0;
+// // i2s config for using the internal ADC
+// i2s_config_t m_i2s_config = {
+//     .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
+//     .sample_rate = 20000,
+//     .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+//     .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+//     .communication_format = I2S_COMM_FORMAT_I2S_LSB,
+//     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+//     .dma_buf_count = 4,
+//     .dma_buf_len = 1024,
+//     .use_apll = false,
+//     .tx_desc_auto_clear = false,
+//     .fixed_mclk = 0};
+
+//   i2s_port_t m_i2sPort = I2S_NUM_0;
+
+//    i2s_driver_install(m_i2sPort, &m_i2s_config, 0, NULL);
+//     // set up the I2S configuration from the subclass
+//    //init ADC pad
+//     i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_4);
+//     // enable the adc
+//     i2s_adc_enable(m_i2sPort);
+
+//   int16_t *buf = (int16_t *)malloc(1024 * sizeof(int16_t));
+
+//   while (1)
+//   {
+//     size_t bytes_read = 0;
+//     memset(buf, 0, 1024*sizeof(int16_t));
+
+//     int k = millis();
+//     i2s_read(m_i2sPort, buf, sizeof(int16_t) * 512, &bytes_read, portMAX_DELAY);
+//     int j = millis();
+
+//     #if 0
+//     Serial.printf("%u, %d\n", bytes_read, j-k);
+//     #else
+//     for (int i = 0; i < bytes_read/2; i+=8)
+//          Serial.println(buf[i]);
+//     Serial.println(0);
+//     #endif
+//   }
+
+#if 1
+  //AudioInfo info(44100, 2, 16); // not sure how to use this at present
+  AnalogConfig config( RX_MODE );
+  config.setInputPin1( inputs::mic_pin );
+  config.sample_rate = 48000;
+    // sample rates below 20kHz don't behave as expected;
+    // not sure I can explain it though.
+  config.bits_per_sample = 16;
+  config.channels = 1;
+  config.buffer_size = 256; // smaller buffers give us smoother extraction
+  config.buffer_count = 8; // probably overkill
+
+
+  AudioLogger::instance().begin(Serial, AudioLogger::Info);
+
+
+
+
+  int kk = 0;
+
+  in.begin(config);
+
+  int16_t *buf = (int16_t *)malloc(4096);
+  int16_t *buf2 = (int16_t *)malloc(4096);
+
+  int16_t med[3] = { 0 };
+
+  while(1)
+  {
+//    if (in.available() < 1024)
+//      continue;
+   // Serial.println(in.available());
+
+   int k = millis();
+    //size_t rc = in.readBytes(buf, 512*sizeof(int16_t)); // approx 10.7ms at 48kHz.
+      // 512 is nominal FFT size.
+      // but could collect smaller chunks for the VU meter.
+
+    size_t rc = in.readBytes((uint8_t*)buf, 256*sizeof(int16_t)); // approx 5.2ms at 48kHz.
+     int j = millis();
+
+    for (int i = 0; i < rc/2; i++)
+    {
+      med[0] = med[1];
+      med[1] = med[2];
+      med[2] = buf[i];
+
+
+      const int &a = med[0];
+      const int &b = med[1];
+      const int &c = med[2];
+
+      int16_t m = 0;
+
+      if (a <= b && a <= c)
+        m = (b <= c) ? b : c;
+      else if (b <= a && b <= c)
+        m = (a <= c) ? a : c;
+      else
+        m = (a <= b) ? a : b;
+
+      buf2[i] = m;
+
+      //Serial.printf("%d %d %d -> %d\n", a,b,c,m);
+
+    }
+
+
+
+//     Serial.printf("%u, %d\n", 0, j-k);
+    //rc = in.readBytes(buf2, 4096);
+    //rc = in.readBytes(buf, sizeof(buf));
+    //rc = in.readBytes(buf, sizeof(buf));
+    //rc = in.readBytes(buf, sizeof(buf));
+   // Serial.println(in.available());
+   // Serial.println("");
+    (void)rc;
+
+
+if(0)
+{
+      Serial.println("2000, 2000");
+
+    for (int i = 0; i < rc/2; i += 1)
+        Serial.printf("%d, %d\n", buf[i], buf2[i] );
+
+      Serial.println("-2000, -2000");
+}
+
+
+  // calculate power
+
+    int32_t sum = 0;
+      // 256 * int16 * int16 == 1 billion; eg fits in a 32-bit int.
+
+    for (int i = 0; i < rc/2; i++)
+      sum += buf2[i] * buf2[i];
+
+    int vu = sqrt( sum / rc / 2 );
+
+    //Serial.printf("%d %d\n", sum, vu );
+    //Serial.println(vu );
+
+    global_vu = vu;
+
+
+   kk++;
+    if (kk == 1000)
+    {
+      Serial.println("task 1k");
+      kk = 0;
+    }
+//    delay( 1 );
+  }
+#endif
+
+  int k;
+
   while (1)
   {
     k++;
-    if (k == 10)
+    if (k == 1000)
     {
       Serial.println("task 1k");
       k = 0;
@@ -151,19 +334,18 @@ void vu_task_fn( void* vu_x )
 
     #define SAMPLES 64
 
-    //float sum = 0.0;
-    for (auto i = 0; i < SAMPLES; i++) 
+    float sum = 0.0;
+    for (auto i = 0; i < SAMPLES; i++)
     {
-      //auto newTime = micros();
+      auto newTime = micros();
 
       int x = analogRead( inputs::mic_pin ); // just read asap
-      (void)x;
-      //sum += x * x;
-      //while ((micros() - newTime) < 20) { /* chill */ }
+      sum += x * x;
+      while ((micros() - newTime) < 20) { /* chill */ }
     }
 
-    //int vu = sqrt( sum / SAMPLES );
-    *((int *)vu_x) = k;//vu;
+    int vu = sqrt( sum / SAMPLES );
+    *((int *)vu_x) = vu;
   }
 }
 
@@ -196,7 +378,7 @@ void button_fn ( ButtonInput::Event e, int count )
 // loop() function -- runs repeatedly as long as board is on ---------------
 
 void loop() {
-  //pixel_ticker_fn();
+  pixel_ticker_fn();
   return;
   int adc_raw = analogRead( inputs::mic_pin );
   Serial.println(adc_raw);

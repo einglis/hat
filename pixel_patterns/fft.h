@@ -29,8 +29,8 @@ public:
     //digitalWrite( en_pin, LOW );
   }
 
-  virtual void advance2( int /*inc*/ ) 
-  { 
+  virtual void advance2( int /*inc*/ )
+  {
     static int k = 0;
     k++;
     if (k == 1000)
@@ -41,7 +41,7 @@ public:
 
     //  unsigned int sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQ));
 
-    for (auto i = 0; i < SAMPLES; i++) 
+    for (auto i = 0; i < SAMPLES; i++)
     {
       newTime = micros();
       vReal[i] = analogRead( mic_pin ); // A conversion takes about 9.7uS on an ESP32
@@ -50,7 +50,7 @@ public:
     }
 
     float sum = 0.0;
-    for (auto i = 0; i < SAMPLES; i++) 
+    for (auto i = 0; i < SAMPLES; i++)
       sum = vReal[i] * vReal[i];
     //Serial.print("sum sq: ");
     //Serial.print(sum);
@@ -65,7 +65,7 @@ public:
 
     //Serial.print(", new: ");
 
-  
+
     float vu__ = sum;
 
     // long terms
@@ -98,15 +98,15 @@ public:
     vu2 = vu;
      if ((vu2 - 170) > 0)
       vu2 -= 170;
-    else 
-      vu2 = 0; 
+    else
+      vu2 = 0;
 
     vu2 /= 6;// vu2 * NUM_PIXELS * 8 / 4096;
     //Serial.print(sum);
 
 
     auto max = 0;
-    for (auto i = 0; i < SAMPLES; i++) 
+    for (auto i = 0; i < SAMPLES; i++)
       if (vReal[i] > max)
         max = vReal[i];
     //Serial.print(", max: ");
@@ -120,8 +120,8 @@ public:
     // fft.ComplexToMagnitude();
   }
 
- virtual void advance( int /*inc*/ ) 
-  { 
+ virtual void advance( int /*inc*/ )
+  {
     static int k = 0;
     k++;
     if (k == 1000)
@@ -130,23 +130,44 @@ public:
       k = 0;
     }
 
-    vu2 = global_vu;// / 100;
+    int raw_vu = global_vu / 16;
+
+
+    static int dec = 10;
+
+    if (raw_vu > vu2)
+    {
+      vu2 = raw_vu;
+      dec = 0;
+    }
+    else
+    {
+        // 10 or less is very rapid; 30 is a bit sluggish
+      if (dec == 16 && vu2)
+      {
+        vu2 -= 1;//= (31*vu2+raw_vu)/32;
+        dec = 0;
+      }
+
+      dec++;
+    }
+
   }
 
-  virtual uint32_t pixel( unsigned int i ) 
-  { 
+  virtual uint32_t pixel( unsigned int i )
+  {
     const int mid = NUM_PIXELS / 2;  // 59 / 2 --> 29
       // but actually, pixels 28 and 29 straddle the centre line
-    
 
-    
+
+
     int pos = 0;
 
     if (i < (mid-1))
       pos = mid - 1 - i;
     else if (i > mid)
       pos = i - mid;
-  
+
     int bright = vu2 * 10;
     if (bright > 255)
       bright = 255;
@@ -157,7 +178,9 @@ public:
     else if (pos > 9)
       col = bright * 0x010100; // yellow
 
-    if (pos < vu2)
+
+
+    if (vu2 && pos < (vu2-1))
       return col;
     else
       return 0;
@@ -166,7 +189,7 @@ public:
       return col;
     else if (i < mid && (mid-i)<=vu)
       return col;
-    else  
+    else
       return 0;
     //Serial.println( vReal[i] );
     return vReal[i] / 100;
