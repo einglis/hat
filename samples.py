@@ -81,7 +81,6 @@ if 1:
 
     for bpm in bpm_range:
 
-        bump_inc = bpm / 60 / fsamp
         max_phases = int((60 / bpm) * fsamp)   # approx interval between bumps at this BPM
         #print(f"at {bpm} bpm, max phases is {max_phases}")
 
@@ -91,7 +90,9 @@ if 1:
 
      
 
-#        phase_plot = plt.figure().add_subplot(111)
+
+        if show_phase_plots:
+            phase_plot = plt.figure().add_subplot(111)
 
         num_phases = min(8, max_phases)  ## XXXEDD: this logic may be overkill
         for p in range(0, num_phases):
@@ -137,8 +138,9 @@ if 1:
                 conv_plot.plot(kx,km, color='orange', linestyle='solid', linewidth=2)
                 plt.ylim(0, 2.6e7)
 
-#            phase_plot.plot(kx,km, color='orange', linestyle='solid', linewidth=2)
-#            plt.title(f"{bpm}")
+            if show_phase_plots:
+                phase_plot.plot(kx,km, color='orange', linestyle='solid', linewidth=2)
+                plt.title(f"{bpm}")
 
             #plt.show()
         
