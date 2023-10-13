@@ -1,8 +1,6 @@
-import functools
 import matplotlib.pyplot as plt
 import math
 import numpy as np
-import time
 
 
 def chunks(lst, n):
@@ -18,7 +16,7 @@ true_fsamp = 20000
 chunk_size = 512
 fsamp = true_fsamp / chunk_size
 
-window_length = true_fsamp * 4    # x seconds
+window_length = true_fsamp * 3    # x seconds
 window_length = chunk_size * math.ceil(window_length / chunk_size)
 
 bpm_range = range( 80, 181, 1 )
@@ -35,7 +33,7 @@ bump_sum = np.sum(bump)
 
 show_raw_samples  = False
 show_bump_profile = False
-show_phase_plots  = True
+show_phase_plots  = False # careful not to have too many BMPs and/or windows
 
 
 all_samples = np.fromfile("resampled.snd", dtype=np.int16)
@@ -53,6 +51,7 @@ if show_bump_profile:
 
 if 1:
 
+  i_window = 1
   for samples in chunks(all_samples, window_length ):
   #for samples in chunks(all_samples, len(all_samples)):
     
@@ -72,11 +71,11 @@ if 1:
  
 
     bx = [] # bpm
-    by = [] # confidence
+    by = [] # sum at max phase
 
-    max_bpm = 0
-    max_bpm_value = 0
+    max_bpm_sum = 0
     max_bpm_phase = 0
+    max_bpm = 0
 
     for bpm in bpm_range:
 
@@ -86,10 +85,8 @@ if 1:
         if show_phase_plots:
             phase_plot = plt.figure().add_subplot(111)
 
-
-        max_p_val = 0
-        max_p_pos = 0
-
+        max_sum = 0
+        max_phase = 0
 
         num_phases = min(8, max_phases)  ## XXXEDD: this logic may be overkill
         for p in range(0, num_phases):
@@ -99,13 +96,11 @@ if 1:
             else:
                 phase = int((max_phases / num_phases) * p)
 
-
-
             samp_sum = 0
             sums = [] # history for debugging
 
             i_bump = 0
-            while i_bump < 10:
+            while i_bump < 6:
                 b_start = int(i_bump * (60 / bpm) * fsamp + phase)
                 #print(f"{bpm}, {phase}, bump {i_bump} at {b_start}")
 
@@ -118,119 +113,53 @@ if 1:
 
                 i_bump += 1
 
+            samp_sum /= bump_sum * i_bump # normalise
+
+            if samp_sum > max_sum:
+                max_sum = samp_sum
+                max_phase = phase
+
+
             if show_phase_plots:
                 phase_plot.plot(sums, color='orange', linestyle='solid', linewidth=2)
                 plt.title(f"{bpm}")
 
-            #plt.show()
-        
-            # kx = []  
-            # ki = []
-            # kj = []
-            # kk = []
-            # km = []
 
-            # samp_sum = 0
-            # bump_sum = 0
-        
-            # for i,p in enumerate(powers):
-            #     bump_ = math.sin( 2 * math.pi * (i+phase)*bump_inc)# * 30000
-            #     bump_ = int(max( 0, bump_ )*255)
-
-            # #    print(Y2[i], bump, samp_sum)
-            #     samp_sum += (p) * bump_
-            #     bump_sum += bump_
-
-            
-           
-
-
-            #     ki.append( p )
-            #     #kj.append( samp_sum/100)
-            #     kk.append((p)*bump_/256)
-            #     kj.append(1e5*bump_)
-            #     km.append(samp_sum/2000)
-
-
-
-            # #print(bpm, phase, samp_sum, bump_sum, samp_sum/bump_sum)
-            # fig = plt.figure()
-            # ax1 = fig.add_subplot(111)
-            # ax1.plot(range(len(ki)), ki, color='red', linestyle='solid', linewidth=2)
-            # ax1.plot(range(len(kj)), kj, color='green', linestyle='solid', linewidth=2)
-            # ax1.plot(range(len(kk)), kk, color='blue', linestyle='solid', linewidth=2)
-            # ax1.plot(range(len(km)),km, color='orange', linestyle='solid', linewidth=2)
-            # plt.ylim(0, 2.6e7)
-            # plt.show()
-            
-            #exit()
-            #break
-            samp_sum /= bump_sum * i_bump # normalise
-            if samp_sum > max_p_val:
-                max_p_val = samp_sum
-                max_p_pos = phase
-
-    #    plt.title(bpm)
-        #plt.show()
-        #print(bpm, max_p_val,max_p_pos)
-
-        if max_p_val > max_bpm_value:
-            max_bpm_value = max_p_val
-            max_bpm_phase = max_p_pos
+        if max_sum > max_bpm_sum:
+            max_bpm_sum = max_sum
+            max_bpm_phase = max_phase
             max_bpm = bpm
 
         bx.append(bpm)
-        by.append(max_p_val)
-
-
+        by.append(max_sum)
 
     print(f"max {max_bpm} bpm at {max_bpm_phase}")
 
 
-    bump_inc = max_bpm / 60 / fsamp
-    bump_width = math.floor(2 / bump_inc)
-
-    hump_stride = (60 / max_bpm) * fsamp
-
-
-    #max_bpm_phase = hump_stride * max_bpm_phase / (2*bump_width) # rescale
-    print(f"phase now {max_bpm_phase}")
 
 
 
-    hx = []
-    hy = []
-    print(int( max_bpm_phase), int(len(powers)-bump_width/2), int(hump_stride))
+    beats = [0] * len(powers)
 
-    i = 0
-    x = int(max_bpm_phase)
+    x = max_bpm_phase + bump_width/2
+    while x < len(powers):
+        beats[int(x)] = 256
+        x += (60 / max_bpm) * fsamp
 
-    while x < int(len(powers)-bump_width) and i < 4:
-        for xx,h in enumerate(bump):
-            hx.append((x+xx-bump_width/2))
-            hy.append(h)
-
-        i += 1
-        x = int( i * (60 / max_bpm) * fsamp  + max_bpm_phase)
-
-
-
-    for i,x in enumerate(powers):
-        bump__ = math.sin( 2 * math.pi * (i+max_bpm_phase) *max_bpm / 60 / fsamp)
-        bump__ = max( 0, bump__ * 256 )
-
-    ax1 = plt.figure().add_subplot(111)
 
     max_power = max(powers)
-    powers = [ p / max_power * 256 for p in powers ]
+    powers = [ p / max_power * 256 for p in powers ] # normalise for display
 
-    ax1.plot(powers, color='red', linestyle='solid', linewidth=2)
-    ax1.plot(bump__, color='green', linestyle='solid', linewidth=2)
-    ax1.plot(hy, color='blue', linestyle='solid', linewidth=2)
+    beat_plot = plt.figure().add_subplot(111)
+    beat_plot.plot(beats, color='green', linestyle='solid', linewidth=2)
+    beat_plot.plot(powers, color='red', linestyle='solid', linewidth=2)
+    plt.title(f"beats, window {i_window}")
 
     bpm_plot = plt.figure().add_subplot(111)
     bpm_plot.plot(bx, by, color='red', linestyle='solid', linewidth=2)
+    plt.title(f"bpm response, window {i_window}")
 
+    i_window += 1
 
 
 plt.show()
