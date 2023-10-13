@@ -34,7 +34,7 @@ xpos = 0
 av = 0
 av_dv = 0
 
-chunk_size = 256
+chunk_size = 512
 for x in chunks(samples,chunk_size):
   if len(x) < chunk_size:
       break
@@ -46,7 +46,7 @@ for x in chunks(samples,chunk_size):
   av += sum / 1e5
   av_dv += 1
 
-  X2.append( xpos )
+  X2.append( xpos/chunk_size )
   Y2.append( sum / 1e5)
   Y3.append( sum / 1e5)
   xpos += chunk_size
@@ -69,11 +69,22 @@ max_phase = 0
 bx = []
 by = []
 
-for bpm in range( 80, 181, 1 ):
+hump_width = 8
+bump = []
+for k in range(hump_width):
+    bump.append( math.floor( 255 * math.sin(2 * math.pi * (k+0.5) / hump_width / 2) + 0.5) )
+
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+ax1.plot(range(len(bump)), bump, color='red', linestyle='solid', linewidth=2)
+
+
+#for bpm in range( 80, 181, 1 ):
+for bpm in range( 100, 141, 1 ):
 
     bump_inc = bpm / 60 / fsamp
     bump_width = math.floor(2 / bump_inc)
-    #print(bump_inc, bump_width)
+    print(bump_inc, bump_width)
 
     Y4 = []
 
@@ -94,17 +105,17 @@ for bpm in range( 80, 181, 1 ):
         kj= []
 
         for i,x in enumerate(X2):
-            bump = math.sin( 2 * math.pi * (i+phase)*bump_inc)# * 30000
-            bump = max( 0, bump )
+            bump_ = math.sin( 2 * math.pi * (i+phase)*bump_inc)# * 30000
+            bump_ = max( 0, bump_ )
 
         #    print(Y2[i], bump, samp_sum)
-            samp_sum += (Y2[i]) * bump
-            bump_sum += bump
+            samp_sum += (Y2[i]) * bump_
+            bump_sum += bump_
 
             ki.append( Y2[i] )
             kj.append( samp_sum/100)
             #kj.append(10000*bump)
-            kk.append((Y2[i])*bump)
+            kk.append((Y2[i])*bump_)
 
         #print(bpm, phase, samp_sum, bump_sum, samp_sum/bump_sum)
         
@@ -135,6 +146,31 @@ for bpm in range( 80, 181, 1 ):
 
 
 print(f"max {max_bpm} bpm at {max_phase}")
+
+
+bump_inc = max_bpm / 60 / fsamp
+bump_width = math.floor(2 / bump_inc)
+
+hump_stride = (60 / max_bpm) * fsamp
+
+
+max_phase = hump_stride * max_phase / (2*bump_width) # rescale
+print(f"phase now {max_phase}")
+
+
+
+hx = []
+hy = []
+print(int( max_phase), int(len(X2)-hump_width/2), int(hump_stride))
+
+for x in range(int(hump_width/2+max_phase), int(len(X2)-hump_width/2), int(hump_stride)):
+    for xx,h in enumerate(bump):
+        hx.append((x-hump_width/2+xx))
+        hy.append(h)
+
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+ax1.plot(hx, hy, color='red', linestyle='solid', linewidth=2)
 
 
 for i,x in enumerate(X2):
