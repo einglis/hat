@@ -7,86 +7,58 @@ import time
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
-        yield np.int32(lst[i:i + n])
+
+        x = np.int32(lst[i:i + n])
+        if len(x) == n:
+            yield x
 
 
-fsamp = 20000 
+
+fsamp = 20000
 chunk_size = 512
+
+window_length = fsamp * 2  # 2 seconds
+window_length = chunk_size * math.ceil(window_length / chunk_size)
+
 hump_width = 16
 bpm_range = range( 80, 181, 1 )
 
 
 
-samples = np.fromfile("resampled.snd", dtype=np.int16)
+all_samples = np.fromfile("resampled.snd", dtype=np.int16)
 
-samples_ = np.array(samples)
 
 if 0:
     fig = plt.figure()
-    plt.plot( samples_)
+    plt.plot(all_samples)
     plt.title("raw samples")
-
 
 if 1:
 
   fig = plt.figure()
   bpm_plot = fig.add_subplot(111)
 
-  for samples in chunks(samples, fsamp*2): # two seconds
+ 
+
+  for samples in chunks(all_samples, window_length ):
+    
+    powers = []  
 
 
-
-    X = np.array(range(0, len(samples)))
-    Y = np.array(samples)
-
-
-
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    # ax1.plot(range(len(bump)), bump, color='red', linestyle='solid', linewidth=2)
-
-
-
-
-
-    samples = samples[0:20000*2]
-
-    # Creating a numpy array
-
-
-
-
-
-    X2 = []
-    Y2 = [] # sum power
-    Y3 = [] # rms
-    Y4 = [] # window
-    xpos = 0
-
-    av = 0
-    av_dv = 0
-
-    for x in chunks(samples,chunk_size):
-        if len(x) < chunk_size:
-            break
-
+    for chunk in chunks(samples, chunk_size):
         sum = 0
-        for xx in x:
-            sum += xx * xx
+        for x in chunk:
+            sum += x * x
+        powers.append( sum / chunk_size)
 
-        av += sum / 1e5
-        av_dv += 1
+    average = 0
+    for p in powers:
+        average += p
+    average /= len(powers)
 
-        X2.append( xpos/chunk_size )
-        Y2.append( sum / 1e5)
-        Y3.append( sum / 1e5)
-        xpos += chunk_size
-        
+    for i,p in enumerate(powers):
+        powers[i] = max(0, p - average)
 
-    av /= av_dv
-
-    for i,y in enumerate(Y2):
-        Y2[i] = max(0, y-av)
 
 
     #fig = plt.figure()
@@ -148,18 +120,18 @@ if 1:
             bump_sum = 0
             kj= []
 
-            for i,x in enumerate(X2):
+            for i,p in enumerate(powers):
                 bump_ = math.sin( 2 * math.pi * (i+phase)*bump_inc)# * 30000
                 bump_ = max( 0, bump_ )
 
             #    print(Y2[i], bump, samp_sum)
-                samp_sum += (Y2[i]) * bump_
+                samp_sum += (p) * bump_
                 bump_sum += bump_
 
-                ki.append( Y2[i] )
+                ki.append( p )
                 kj.append( samp_sum/100)
                 #kj.append(10000*bump)
-                kk.append((Y2[i])*bump_)
+                kk.append((p)*bump_)
 
             #print(bpm, phase, samp_sum, bump_sum, samp_sum/bump_sum)
             
@@ -205,12 +177,12 @@ if 1:
 
     hx = []
     hy = []
-    print(int( max_phase), int(len(X2)-hump_width/2), int(hump_stride))
+    print(int( max_phase), int(len(powers)-hump_width/2), int(hump_stride))
 
     i = 0
     x = int(max_phase)
 
-    while x < int(len(X2)-hump_width) and i < 4:
+    while x < int(len(powers)-hump_width) and i < 4:
         for xx,h in enumerate(bump):
             hx.append((x+xx-hump_width/2))
             hy.append(h*512) # scale purely for display
@@ -227,9 +199,9 @@ if 1:
 
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
-    ax1.plot(X2, Y3, color='red', linestyle='solid', linewidth=2)
-    ax1.plot(X2, Y4, color='green', linestyle='solid', linewidth=2)
-    ax1.plot(hx, hy, color='blue', linestyle='solid', linewidth=2)
+    ax1.plot(Y3, color='red', linestyle='solid', linewidth=2)
+    ax1.plot(Y4, color='green', linestyle='solid', linewidth=2)
+    ax1.plot(hy, color='blue', linestyle='solid', linewidth=2)
 
  
     bpm_plot.plot(bx, by, color='red', linestyle='solid', linewidth=2)
