@@ -35,7 +35,7 @@ bump_sum = np.sum(bump)
 
 show_raw_samples  = False
 show_bump_profile = False
-show_phase_plots  = False
+show_phase_plots  = True
 
 
 all_samples = np.fromfile("resampled.snd", dtype=np.int16)
@@ -100,13 +100,9 @@ if 1:
                 phase = int((max_phases / num_phases) * p)
 
 
-            samp_sum = 0
 
-            kx = []
-            ki = []
-            kj = []
-            kk = []
-            km = []
+            samp_sum = 0
+            sums = [] # history for debugging
 
             i_bump = 0
             while i_bump < 10:
@@ -118,25 +114,12 @@ if 1:
 
                 for i,b in enumerate(bump):
                     samp_sum += b * powers[b_start + i]
-                    
-                    kx.append(b_start + i)
-                    kj.append(b*1e5)
-                    kk.append(b * powers[b_start + i]/256)
-                    km.append(samp_sum/2000)
+                    sums.append(samp_sum)
 
                 i_bump += 1
 
-            if 0:
-                fig = plt.figure()
-                conv_plot = fig.add_subplot(111)
-                conv_plot.plot(powers, color='red', linestyle='solid', linewidth=2)
-                conv_plot.plot(kx,kj, color='green', linestyle='solid', linewidth=2)
-                conv_plot.plot(kx,kk, color='blue', linestyle='solid', linewidth=2)
-                conv_plot.plot(kx,km, color='orange', linestyle='solid', linewidth=2)
-                plt.ylim(0, 2.6e7)
-
             if show_phase_plots:
-                phase_plot.plot(kx,km, color='orange', linestyle='solid', linewidth=2)
+                phase_plot.plot(sums, color='orange', linestyle='solid', linewidth=2)
                 plt.title(f"{bpm}")
 
             #plt.show()
