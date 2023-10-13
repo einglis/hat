@@ -18,7 +18,7 @@ true_fsamp = 20000
 chunk_size = 512
 fsamp = true_fsamp / chunk_size
 
-window_length = true_fsamp * 2  # 2 seconds
+window_length = true_fsamp * 4    # x seconds
 window_length = chunk_size * math.ceil(window_length / chunk_size)
 
 bpm_range = range( 80, 181, 1 )
@@ -35,7 +35,7 @@ bump_sum = np.sum(bump)
 
 show_raw_samples  = False
 show_bump_profile = False
-
+show_phase_plots  = False
 
 
 all_samples = np.fromfile("resampled.snd", dtype=np.int16)
@@ -53,9 +53,8 @@ if show_bump_profile:
 
 if 1:
 
-
-
-  for samples in chunks(all_samples, len(all_samples)):#window_length ):
+  for samples in chunks(all_samples, window_length ):
+  #for samples in chunks(all_samples, len(all_samples)):
     
     powers = []  
 
@@ -84,15 +83,13 @@ if 1:
         max_phases = int((60 / bpm) * fsamp)   # approx interval between bumps at this BPM
         #print(f"at {bpm} bpm, max phases is {max_phases}")
 
+        if show_phase_plots:
+            phase_plot = plt.figure().add_subplot(111)
+
 
         max_p_val = 0
         max_p_pos = 0
 
-     
-
-
-        if show_phase_plots:
-            phase_plot = plt.figure().add_subplot(111)
 
         num_phases = min(8, max_phases)  ## XXXEDD: this logic may be overkill
         for p in range(0, num_phases):
@@ -112,9 +109,9 @@ if 1:
             km = []
 
             i_bump = 0
-            while i_bump < 100:
+            while i_bump < 10:
                 b_start = int(i_bump * (60 / bpm) * fsamp + phase)
-                print(f"{bpm}, {phase}, bump {i_bump} at {b_start}")
+                #print(f"{bpm}, {phase}, bump {i_bump} at {b_start}")
 
                 if b_start+bump_width > len(powers):
                     break
