@@ -162,75 +162,127 @@ void vu_task_fn( void* vu_x )
   Serial.print("vu_task_fn() running on core ");
   Serial.println(xPortGetCoreID());
 
-// // i2s config for using the internal ADC
-// i2s_config_t m_i2s_config = {
-//     .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-//     .sample_rate = 20000,
-//     .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-//     .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
-//     .communication_format = I2S_COMM_FORMAT_I2S_LSB,
-//     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-//     .dma_buf_count = 4,
-//     .dma_buf_len = 1024,
-//     .use_apll = false,
-//     .tx_desc_auto_clear = false,
-//     .fixed_mclk = 0};
 
-//   i2s_port_t m_i2sPort = I2S_NUM_0;
-
-//    i2s_driver_install(m_i2sPort, &m_i2s_config, 0, NULL);
-//     // set up the I2S configuration from the subclass
-//    //init ADC pad
-//     i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_4);
-//     // enable the adc
-//     i2s_adc_enable(m_i2sPort);
-
-//   int16_t *buf = (int16_t *)malloc(1024 * sizeof(int16_t));
-
-//   while (1)
-//   {
-//     size_t bytes_read = 0;
-//     memset(buf, 0, 1024*sizeof(int16_t));
-
-//     int k = millis();
-//     i2s_read(m_i2sPort, buf, sizeof(int16_t) * 512, &bytes_read, portMAX_DELAY);
-//     int j = millis();
-
-//     #if 0
-//     Serial.printf("%u, %d\n", bytes_read, j-k);
-//     #else
-//     for (int i = 0; i < bytes_read/2; i+=8)
-//          Serial.println(buf[i]);
-//     Serial.println(0);
-//     #endif
-//   }
-
-#if 1
   //AudioInfo info(44100, 2, 16); // not sure how to use this at present
   AnalogConfig config( RX_MODE );
   config.setInputPin1( inputs::mic_pin );
-  config.sample_rate = 48000;
+  config.sample_rate = 20000;
     // sample rates below 20kHz don't behave as expected;
     // not sure I can explain it though.
+    // 20 kHz is more than adequate since we're only using powers not FFTs
   config.bits_per_sample = 16;
   config.channels = 1;
-  config.buffer_size = 256; // smaller buffers give us smoother extraction
+  config.buffer_size = 64; // smaller buffers give us smoother extraction
   config.buffer_count = 8; // probably overkill
 
 
   AudioLogger::instance().begin(Serial, AudioLogger::Info);
+  in.begin(config);
+
+
+  const int chunk_size = 512; // must be a multiple of sub_chunk_size
+  const int sub_chunk_size = config.buffer_size; // smaller sub-chunks keep the VU meter more responsive
+  int16_t *sample_buf = (int16_t *)malloc(chunk_size * sizeof(int16_t));
+  int chunk_fill = 0;
+
+  const int fsamp = config.sample_rate / chunk_size;
+      // about 39Hz (-> 25.6 ms) with 512 chunks at 20kHz sample rate
+
+  const int window_length = fsamp * 3; // 3 second windows; 76 chunks long
+  int32_t *powers = (int32_t *)malloc(window_length * sizeof(int32_t));
+  uint32_t power_acc = 0;
+    // samples are stored as signed 16-bit, but really only 12-bits of resolution,
+    // so 512 squared values is  2^9 * 2^11 * 2^11 = 2^31.  Phew!  Just fits :)
+  int num_powers = 0;
+
+
+  const int bump_width = 8;
+  int bump[ bump_width ] = { 0 };
+  int bump_sum = 0;
+
+  for (int i = 0; i < bump_width; i++)
+  {
+    bump[i] = 255 * sin( 2*M_PI * (i + 0.5) / bump_width / 2 );
+    bump_sum += bump[i];
+    Serial.printf("bump %d - %d\n", i, bump[i]);
+  }
+  Serial.printf("bump sum %d\n", bump_sum);
+
+  long last = millis();
+  int num_loops = 0;
+
+
+  while(1)
+  {
+    size_t rc = in.readBytes((uint8_t*)(sample_buf+chunk_fill), sub_chunk_size*sizeof(int16_t));
+      // ignore the case where we get too little data; the rest of the logic should not explode, at least
+
+    uint32_t power_sum = 0;
+    for (int i = 0; i < sub_chunk_size; i++)
+      power_sum += (sample_buf+chunk_fill)[i] * (sample_buf+chunk_fill)[i];
+
+    int vu = sqrt( power_sum / sub_chunk_size ); // XXXEDD: sqrt needs attention
+    *((int *)vu_x) = vu; // XXXEDD:  :(
+
+    power_acc += power_sum;
+    chunk_fill += sub_chunk_size;
+
+    if (chunk_fill == chunk_size)
+    {
+      powers[ num_powers++ ] += power_acc / chunk_size; // divide just to reduce magnitude a bit
+
+      chunk_fill = 0; // reset
+      power_acc = 0; // reset
+
+      #if 0
+      long now = millis();
+      if (now - last >= 1000)
+      {
+        Serial.printf("%d loops in %ld ms --> %.2f Hz\n", num_loops, (now-last), 1000.0 * num_loops / (now-last) );
+        last = now;
+        num_loops = 0;
+      }
+      num_loops++;
+      #endif
+    }
+
+    if (num_powers < window_length)
+      continue;
+
+
+    int32_t power_av = 0;
+    for (int i = 0; i < num_powers; i++)
+      power_av += powers[i];
+    power_av /= num_powers;
+
+    for (int i = 0; i < num_powers; i++)
+      powers[i] = max( 0, powers[i] - power_av );
 
 
 
+    num_powers = 0; // reset
+  }
+
+#if 0
 
   int kk = 0;
 
   in.begin(config);
 
-  int16_t *buf = (int16_t *)malloc(4096);
   int16_t *buf2 = (int16_t *)malloc(4096);
+  int16_t *buf3 = (int16_t *)malloc(4096);
 
   int16_t med[3] = { 0 };
+
+
+  int16_t my_sin[2048];
+  for (int i = 0; i < 2048; i++)
+  {
+    my_sin[i] = 255*sin(2*M_PI / 2048 * i);
+    if (my_sin[i] < 0)
+      my_sin[i] = 0;
+   // Serial.println(my_sin[i]);
+  }
 
   while(1)
   {
@@ -243,7 +295,7 @@ void vu_task_fn( void* vu_x )
       // 512 is nominal FFT size.
       // but could collect smaller chunks for the VU meter.
 
-    size_t rc = in.readBytes((uint8_t*)buf, 256*sizeof(int16_t)); // approx 5.2ms at 48kHz.
+    size_t rc = in.readBytes((uint8_t*)buf, 64*sizeof(int16_t)); // approx 5.2ms at 48kHz.
      int j = millis();
 
     for (int i = 0; i < rc/2; i++)
@@ -306,20 +358,82 @@ if(0)
     int vu = sqrt( sum / rc / 2 );
 
     //Serial.printf("%d %d\n", sum, vu );
-    //Serial.println(vu );
+
+    int bpm = 125;
+
+
+   // Serial.println( 30000 * my_sin[(int)(2*1.3*kk)%2048 ] );
+    buf3[kk] = vu;
 
     global_vu = vu;
 
 
    kk++;
-    if (kk == 1000)
+    if (kk == 2048)
     {
-      Serial.println("task 1k");
+      Serial.println("task 2 ki");
       kk = 0;
+
+      for (int bpm = 80; bpm <= 180; bpm += 10)
+      {
+        int bpm_max = 0;
+        int bpm_max_phase = 0;
+
+        int sin_inc = bpm * 1.3 / 60;
+//        double sin_factor = 0.000136135 * bpm;
+    //Serial.println( 30000 * sin( 0.017*kk) );
+
+
+
+        for (int phase = 0; phase < 2048; phase++)
+        {
+          int i_pulse = 0;
+//          int pulse_pos = 0;
+
+          int sum = 0;
+
+          //while (pulse_pos < 2048 && i_pulse < 5)
+          {
+            int nn = 0;
+            for (int s = 0; s < 2028; s++)
+            {
+              nn = s * bpm * 1.3 / 60;
+
+
+
+              int ss = my_sin[(nn)%2048 ];
+              sum +=  ss * buf3[(phase+s)%2048];
+
+              //nn += sin_inc;
+              i_pulse = nn / 2048;
+              if (i_pulse >= 5)
+                break;
+
+            }
+
+            // sum +=  5 * buf3[(pulse_pos+phase+2047)%2048];
+            // sum += 10 * buf3[(pulse_pos+phase)%2048];
+            // sum +=  5 * buf3[(pulse_pos+phase+1)%2048];
+
+            // i_pulse++;
+            // pulse_pos = 060000 * i_pulse / bpm / 1.3;
+          }
+
+          if (sum > bpm_max)
+          {
+            bpm_max = sum;
+            bpm_max_phase = phase;
+          }
+
+        }
+
+        Serial.printf("BPM %3d, had max sum %d at phase %d\n", bpm, bpm_max, bpm_max_phase );
+      }
+
+
     }
 //    delay( 1 );
   }
-#endif
 
   int k;
 
@@ -347,6 +461,7 @@ if(0)
     int vu = sqrt( sum / SAMPLES );
     *((int *)vu_x) = vu;
   }
+  #endif
 }
 
 void start_vu_task( )
@@ -364,10 +479,13 @@ void start_vu_task( )
 //void button_fn ( ButtonInput::Event e, int count );
 void button_fn ( ButtonInput::Event e, int count )
 {
-  static int on = 0;
+  static int on = 1;
 
   if (e == ButtonInput::HoldShort)
+  {
     on = !on;
+    Serial.printf("Now %s\n", (on)? "on":"off");
+  }
   else if (e == ButtonInput::Press)
     cycle_pattern();
 

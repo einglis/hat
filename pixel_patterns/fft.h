@@ -126,11 +126,11 @@ public:
     k++;
     if (k == 1000)
     {
-      Serial.println("leds 1k");
+      //Serial.println("leds 1k");
       k = 0;
     }
 
-    int raw_vu = global_vu / 16;
+    int raw_vu = global_vu / 32;
 
 
     static int dec = 10;
