@@ -155,6 +155,39 @@ void loop() {
 AnalogAudioStream in;
 
 
+void find_beats( int32_t *powers, const int num_powers, const int fsamp )
+{
+  const int bump_width = 8;
+  static int bump[ bump_width ] = { 0 };
+  static int bump_sum = 0;
+
+  if (bump_sum == 0)
+  {
+    for (int i = 0; i < bump_width; i++)
+    {
+      bump[i] = 255 * sin( 2*M_PI * (i + 0.5) / bump_width / 2 );
+      bump_sum += bump[i];
+      Serial.printf("bump %d - %d\n", i, bump[i]);
+    }
+    Serial.printf("bump sum %d\n", bump_sum);
+  }
+  Serial.println("find beats");
+
+
+
+  int32_t power_av = 0;
+  for (int i = 0; i < num_powers; i++)
+    power_av += powers[i];
+  power_av /= num_powers;
+
+  for (int i = 0; i < num_powers; i++)
+    powers[i] = max( 0, powers[i] - power_av );
+
+}
+
+
+
+
 
 TaskHandle_t vu_task;
 void vu_task_fn( void* vu_x )
@@ -182,31 +215,20 @@ void vu_task_fn( void* vu_x )
 
   const int chunk_size = 512; // must be a multiple of sub_chunk_size
   const int sub_chunk_size = config.buffer_size; // smaller sub-chunks keep the VU meter more responsive
-  int16_t *sample_buf = (int16_t *)malloc(chunk_size * sizeof(int16_t));
+  int16_t *sample_buf = (int16_t *)malloc(sub_chunk_size * sizeof(int16_t));
   int chunk_fill = 0;
 
   const int fsamp = config.sample_rate / chunk_size;
-      // about 39Hz (-> 25.6 ms) with 512 chunks at 20kHz sample rate
+      // about 39Hz (-> 25.6 ms) with 512-long chunks at 20kHz sample rate
 
   const int window_length = fsamp * 3; // 3 second windows; 76 chunks long
   int32_t *powers = (int32_t *)malloc(window_length * sizeof(int32_t));
+  int num_powers = 0;
+  
   uint32_t power_acc = 0;
     // samples are stored as signed 16-bit, but really only 12-bits of resolution,
     // so 512 squared values is  2^9 * 2^11 * 2^11 = 2^31.  Phew!  Just fits :)
-  int num_powers = 0;
 
-
-  const int bump_width = 8;
-  int bump[ bump_width ] = { 0 };
-  int bump_sum = 0;
-
-  for (int i = 0; i < bump_width; i++)
-  {
-    bump[i] = 255 * sin( 2*M_PI * (i + 0.5) / bump_width / 2 );
-    bump_sum += bump[i];
-    Serial.printf("bump %d - %d\n", i, bump[i]);
-  }
-  Serial.printf("bump sum %d\n", bump_sum);
 
   long last = millis();
   int num_loops = 0;
@@ -214,19 +236,19 @@ void vu_task_fn( void* vu_x )
 
   while(1)
   {
-    size_t rc = in.readBytes((uint8_t*)(sample_buf+chunk_fill), sub_chunk_size*sizeof(int16_t));
+    size_t rc = in.readBytes((uint8_t*)sample_buf, sub_chunk_size*sizeof(int16_t));
       // ignore the case where we get too little data; the rest of the logic should not explode, at least
 
     uint32_t power_sum = 0;
     for (int i = 0; i < sub_chunk_size; i++)
-      power_sum += (sample_buf+chunk_fill)[i] * (sample_buf+chunk_fill)[i];
-
-    int vu = sqrt( power_sum / sub_chunk_size ); // XXXEDD: sqrt needs attention
-    *((int *)vu_x) = vu; // XXXEDD:  :(
-
+      power_sum += sample_buf[i] * sample_buf[i];
     power_acc += power_sum;
-    chunk_fill += sub_chunk_size;
 
+    // update the VU meter, regardless of what happens next
+    *((int *)vu_x) = sqrt( power_sum / sub_chunk_size ); // XXXEDD: sqrt needs attention
+
+
+    chunk_fill += sub_chunk_size;
     if (chunk_fill == chunk_size)
     {
       powers[ num_powers++ ] += power_acc / chunk_size; // divide just to reduce magnitude a bit
@@ -234,33 +256,26 @@ void vu_task_fn( void* vu_x )
       chunk_fill = 0; // reset
       power_acc = 0; // reset
 
-      #if 0
-      long now = millis();
-      if (now - last >= 1000)
-      {
-        Serial.printf("%d loops in %ld ms --> %.2f Hz\n", num_loops, (now-last), 1000.0 * num_loops / (now-last) );
-        last = now;
-        num_loops = 0;
-      }
       num_loops++;
-      #endif
+        // cound full chunks as a loop, rather than sub-chunks, because that's what we really care about
     }
 
-    if (num_powers < window_length)
-      continue;
+    if (num_powers == window_length)
+    {
+      find_beats( powers, num_powers, fsamp );
+      num_powers = 0; // reset
+    }
 
 
-    int32_t power_av = 0;
-    for (int i = 0; i < num_powers; i++)
-      power_av += powers[i];
-    power_av /= num_powers;
-
-    for (int i = 0; i < num_powers; i++)
-      powers[i] = max( 0, powers[i] - power_av );
-
-
-
-    num_powers = 0; // reset
+#if 1
+    long now = millis();
+    if (now - last >= 5000) // report every five seconds
+    {
+      Serial.printf("%d loops in %ld ms --> %.2f Hz\n", num_loops, (now-last), 1000.0 * num_loops / (now-last) );
+      num_loops = 0; // reset
+      last = now;
+    }
+#endif
   }
 
 #if 0
