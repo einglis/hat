@@ -34,6 +34,8 @@ bump_sum = np.sum(bump)
 show_raw_samples  = False
 show_bump_profile = False
 show_phase_plots  = False # careful not to have too many BMPs and/or windows
+show_bpm_results  = True
+show_beat_points  = True
 
 
 all_samples = np.fromfile("resampled.snd", dtype=np.int16)
@@ -50,10 +52,10 @@ if show_bump_profile:
 
 
 if 1:
-
+ for kk in range(1):
   i_window = 1
-  for samples in chunks(all_samples, window_length ):
-  #for samples in chunks(all_samples, len(all_samples)):
+  #for samples in chunks(all_samples, window_length ):
+  for samples in chunks(all_samples, len(all_samples)):
     
     powers = []  
 
@@ -99,6 +101,8 @@ if 1:
             samp_sum = 0
             sums = [] # history for debugging
 
+            temp = [0] * bump_width
+
             i_bump = 0
             while i_bump < 6:
                 b_start = int(i_bump * (60 / bpm) * fsamp + phase)
@@ -107,11 +111,14 @@ if 1:
                 if b_start+bump_width > len(powers):
                     break
 
-                for i,b in enumerate(bump):
-                    samp_sum += b * powers[b_start + i]
-                    sums.append(samp_sum)
+                for i in range(bump_width):
+                    temp[i] += powers[b_start + i]
 
                 i_bump += 1
+
+            for i,b in enumerate(bump):
+                samp_sum += b * temp[i]
+                sums.append(samp_sum)
 
             samp_sum /= bump_sum * i_bump # normalise
 
@@ -138,26 +145,29 @@ if 1:
 
 
 
+    if show_beat_points:
 
-    beats = [0] * len(powers)
+        beats = [0] * len(powers)
 
-    x = max_bpm_phase + bump_width/2
-    while x < len(powers):
-        beats[int(x)] = 256
-        x += (60 / max_bpm) * fsamp
+        x = max_bpm_phase + bump_width/2
+        while x < len(powers):
+            beats[int(x)] = 256
+            x += (60 / max_bpm) * fsamp
 
 
-    max_power = max(powers)
-    powers = [ p / max_power * 256 for p in powers ] # normalise for display
+        max_power = max(powers)
+        powers = [ p / max_power * 256 for p in powers ] # normalise for display
 
-    beat_plot = plt.figure().add_subplot(111)
-    beat_plot.plot(beats, color='green', linestyle='solid', linewidth=2)
-    beat_plot.plot(powers, color='red', linestyle='solid', linewidth=2)
-    plt.title(f"beats, window {i_window}")
+        beat_plot = plt.figure().add_subplot(111)
+        beat_plot.plot(beats, color='green', linestyle='solid', linewidth=2)
+        beat_plot.plot(powers, color='red', linestyle='solid', linewidth=2)
+        plt.title(f"beats, window {i_window}")
 
-    bpm_plot = plt.figure().add_subplot(111)
-    bpm_plot.plot(bx, by, color='red', linestyle='solid', linewidth=2)
-    plt.title(f"bpm response, window {i_window}")
+    if show_bpm_results:
+
+        bpm_plot = plt.figure().add_subplot(111)
+        bpm_plot.plot(bx, by, color='red', linestyle='solid', linewidth=2)
+        plt.title(f"bpm response, window {i_window}")
 
     i_window += 1
 
