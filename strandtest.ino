@@ -158,21 +158,11 @@ AnalogAudioStream in;
 void find_beats( int32_t *powers, const int num_powers, const int fsamp )
 {
   const int bump_width = 8;
-  static int bump[ bump_width ] = { 0 };
-  static int bump_sum = 0;
+  static int bump[ bump_width ] = { 0 }; // XXXEDD: can we afford to en-float this?
 
-  if (bump_sum == 0)
-  {
+  if (bump[0] == 0) // first time
     for (int i = 0; i < bump_width; i++)
-    {
       bump[i] = 255 * sin( 2*M_PI * (i + 0.5) / bump_width / 2 );
-      bump_sum += bump[i];
-      Serial.printf("bump %d - %d\n", i, bump[i]);
-    }
-    Serial.printf("bump sum %d\n", bump_sum);
-  }
-  Serial.println("find beats");
-
 
 
   int32_t power_av = 0;
@@ -181,8 +171,82 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
   power_av /= num_powers;
 
   for (int i = 0; i < num_powers; i++)
-    powers[i] = max( 0, powers[i] - power_av );
+    powers[i] = max( 0, powers[i] - power_av ) / 1024;
 
+
+
+  int best_bpm = 0;
+  int best_bpm_phase = 0;
+  float best_bpm_sum = 0;
+
+  for (int bpm = 80; bpm <= 180; bpm += 1)
+  {
+    //  Serial.printf("----------- %d bpm ----------\n", bpm);
+      const int max_phases = fsamp * 60 / bpm;
+      const int num_phases = min( 8, max_phases );
+
+      int best_phase = 0;
+      float best_phase_sum = 0;
+
+      int max_bumps = num_powers * bpm / fsamp / 60 - 1;
+      //Serial.printf("expect %d max bumps\n", max_bumps);
+        // XXXEDD: return to this
+
+
+      for (int p = 0; p < num_phases; p++)
+      {
+          const int phase = p * (max_phases/num_phases); // offset
+
+          float sum = 0;
+          int num_bumps = 0;
+          for (; num_bumps < 100; num_bumps++) // XXXEDD: move this out
+          {
+            const int bump_pos = num_bumps * fsamp * 60 / bpm + phase;
+            if (bump_pos + bump_width > num_powers)
+              break; // no room at the inn!
+
+            for (int i = 0; i < bump_width; i++)
+            {
+              sum += bump[i] * (float)powers[bump_pos + i]; // /64 to make it fit
+              //Serial.printf("phase %d, sum %f, bump %d, pwr %d, mult %f\n",
+              //  phase, sum, bump[i], powers[bump_pos + i], bump[i] * (float)powers[bump_pos + i]);
+            }
+          }
+
+          // bump is 8 wide; assume 8 * 256 = 2048 == 2^11
+          // and we have 8 ish bumps --> 2^14
+          // powers are of the order 2^22
+          // so one phase --> 2^36; // need to decimate the powers a bit
+          // except somehow it seems to be 2^42!
+
+          //Serial.printf("phase %d, sum %f, bumps %d, last at %d\n", phase, sum/num_bumps, num_bumps, num_bumps * fsamp * 60 / bpm + phase);
+          sum /= num_bumps; // normalise
+
+          if (sum > best_phase_sum)
+          {
+            best_phase_sum = sum;
+            best_phase = phase;
+          }
+
+      }
+     // Serial.printf("%3d bpm - %f\n", bpm, best_phase_sum);
+      //Serial.printf("%f\n",best_phase_sum);
+
+      if (best_phase_sum > best_bpm_sum)
+      {
+        best_bpm_sum = best_phase_sum;
+        best_bpm_phase = best_phase;
+        best_bpm = bpm;
+      }
+  }
+
+  // Serial.println(0);
+  // Serial.println(0);
+  // Serial.println(0);
+
+  Serial.printf("Best %d bpm with phase %d\n", best_bpm, best_bpm_phase );
+  (void)best_bpm;
+  (void)best_bpm_phase;
 }
 
 
@@ -221,7 +285,7 @@ void vu_task_fn( void* vu_x )
   const int fsamp = config.sample_rate / chunk_size;
       // about 39Hz (-> 25.6 ms) with 512-long chunks at 20kHz sample rate
 
-  const int window_length = fsamp * 3; // 3 second windows; 76 chunks long
+  const int window_length = fsamp * 6; // 3 second windows; 76 chunks long
   int32_t *powers = (int32_t *)malloc(window_length * sizeof(int32_t));
   int num_powers = 0;
   

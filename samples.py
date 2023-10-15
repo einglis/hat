@@ -28,7 +28,6 @@ bump_width = 8  # narrow is less comuptation and more discriminating
 bump = []
 for k in range(bump_width):
     bump.append( math.floor( 255 * math.sin(2 * math.pi * (k+0.5) / bump_width / 2) + 0.5) )
-bump_sum = np.sum(bump)
 
 
 show_raw_samples  = False
@@ -67,7 +66,7 @@ if 1:
 
     average = int(np.sum(powers) / len(powers))
     powers = [ max(0, p - average) for p in powers ]
-
+    powers = [ int(p)/1024 for p in powers ]
 
 
  
@@ -75,9 +74,9 @@ if 1:
     bx = [] # bpm
     by = [] # sum at max phase
 
-    max_bpm_sum = 0
-    max_bpm_phase = 0
-    max_bpm = 0
+    best_bpm = 0
+    best_bpm_phase = 0
+    best_bpm_sum = 0
 
     for bpm in bpm_range:
 
@@ -87,16 +86,13 @@ if 1:
         if show_phase_plots:
             phase_plot = plt.figure().add_subplot(111)
 
-        max_sum = 0
-        max_phase = 0
+        best_phase = 0
+        best_phase_sum = 0
 
         num_phases = min(8, max_phases)  ## XXXEDD: this logic may be overkill
         for p in range(0, num_phases):
             
-            if (num_phases == max_phases):
-                phase = p
-            else:
-                phase = int((max_phases / num_phases) * p)
+            phase = int((max_phases / num_phases) * p)
 
             samp_sum = 0
             sums = [] # history for debugging
@@ -117,14 +113,14 @@ if 1:
                 i_bump += 1
 
             for i,b in enumerate(bump):
-                samp_sum += b * temp[i]
+                samp_sum += b * (temp[i])
                 sums.append(samp_sum)
 
-            samp_sum /= bump_sum * i_bump # normalise
+            samp_sum /= i_bump # normalise
 
-            if samp_sum > max_sum:
-                max_sum = samp_sum
-                max_phase = phase
+            if samp_sum > best_phase_sum:
+                best_phase_sum = samp_sum
+                best_phase = phase
 
 
             if show_phase_plots:
@@ -132,15 +128,15 @@ if 1:
                 plt.title(f"{bpm}")
 
 
-        if max_sum > max_bpm_sum:
-            max_bpm_sum = max_sum
-            max_bpm_phase = max_phase
-            max_bpm = bpm
+        if best_phase_sum > best_bpm_sum:
+            best_bpm_sum = best_phase_sum
+            best_bpm_phase = best_phase
+            best_bpm = bpm
 
         bx.append(bpm)
-        by.append(max_sum)
+        by.append(best_phase_sum)
 
-    print(f"max {max_bpm} bpm at {max_bpm_phase}")
+    print(f"max {best_bpm} bpm at {best_bpm_phase}")
 
 
 
@@ -149,14 +145,14 @@ if 1:
 
         beats = [0] * len(powers)
 
-        x = max_bpm_phase + bump_width/2
+        x = best_bpm_phase + bump_width/2
         while x < len(powers):
             beats[int(x)] = 256
-            x += (60 / max_bpm) * fsamp
+            x += (60 / best_bpm) * fsamp
 
 
         max_power = max(powers)
-        powers = [ p / max_power * 256 for p in powers ] # normalise for display
+        #powers = [ p / max_power * 256 for p in powers ] # normalise for display
 
         beat_plot = plt.figure().add_subplot(111)
         beat_plot.plot(beats, color='green', linestyle='solid', linewidth=2)
