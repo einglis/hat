@@ -126,7 +126,7 @@ public:
     k++;
     if (k == 1000)
     {
-      //Serial.println("leds 1k");
+      Serial.println("leds 1k");
       k = 0;
     }
 
@@ -152,6 +152,9 @@ public:
       dec++;
     }
 
+    if (global_beat > 0)
+      global_beat--;
+
   }
 
   virtual uint32_t pixel( unsigned int i )
@@ -159,6 +162,10 @@ public:
     const int mid = NUM_PIXELS / 2;  // 59 / 2 --> 29
       // but actually, pixels 28 and 29 straddle the centre line
 
+
+    if (i < 4 || i >= NUM_PIXELS - 4)
+      if (global_beat)
+        return 0xffffff;
 
 
     int pos = 0;

@@ -7,7 +7,7 @@
 namespace outputs {
   enum {
     pixels_pin = 4,
-    pixels_en_pin = 14,
+    pixels_en_N_pin = 14,
     button_en_pin = 15,
     mic_vdd_pin = 21,
     mic_gnd_pin = 22
@@ -21,7 +21,7 @@ namespace inputs {
 }
 
 #define NUM_PIXELS 59 // really 60, but the last one is mostly hidden
-#define PIXEL_BRIGHTNESS 64 // full brightness (255) is: a) too much and b) will kill the battery/MCU
+#define PIXEL_BRIGHTNESS 16 // 64 // full brightness (255) is: a) too much and b) will kill the battery/MCU
 
 Adafruit_NeoPixel strip( NUM_PIXELS, outputs::pixels_pin, NEO_GRB + NEO_KHZ800 );
 ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
@@ -29,6 +29,7 @@ ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
 // ----------------------------------------------------------------------------
 
 int global_vu;
+int global_beat = 0;
 
 
 #include "pixel_pattern.h"
@@ -72,8 +73,8 @@ void setup()
   Serial.println("Hat's hat!");
 
   pinMode( outputs::pixels_pin, OUTPUT );
-  pinMode( outputs::pixels_en_pin, OUTPUT );
-  digitalWrite( outputs::pixels_en_pin, HIGH ); // pixels off
+  pinMode( outputs::pixels_en_N_pin, OUTPUT );
+  digitalWrite( outputs::pixels_en_N_pin, HIGH ); // pixels off
 
   pinMode( inputs::button_pin, INPUT_PULLDOWN );
   pinMode( outputs::button_en_pin, OUTPUT );
@@ -96,21 +97,21 @@ void setup()
   button.begin( button_fn );
 
 
-//  pixel_patterns.push_back( &rainbow1 );
+  pixel_patterns.push_back( &rainbow1 );
 //  pixel_patterns.push_back( &rainbow2 );
 //  pixel_patterns.push_back( &snakes );
 //pixel_patterns.push_back( &random_colours );
 //pixel_patterns.push_back( &sparkle_white );
 //  pixel_patterns.push_back( &sparkle_red );
 //pixel_patterns.push_back( &sparkle_yellow );
-  pixel_patterns.push_back( &fft_basic );
+  //pixel_patterns.push_back( &fft_basic );
 
   pixel_ticker.attach_ms( 10, pixel_ticker_fn );
 
   Serial.print("loop() running on core ");
   Serial.println(xPortGetCoreID());
 
-  start_vu_task( );
+  //start_vu_task( );
 }
 
 
@@ -154,11 +155,13 @@ void loop() {
 //AudioInfo info(44100, 2, 16);
 AnalogAudioStream in;
 
+int global_next_beat = 10000;
+int global_beat_int = 10000;
 
 void find_beats( int32_t *powers, const int num_powers, const int fsamp )
 {
   const int bump_width = 8;
-  static int bump[ bump_width ] = { 0 }; // XXXEDD: can we afford to en-float this?
+  static int bump[ bump_width ] = { 0 };
 
   if (bump[0] == 0) // first time
     for (int i = 0; i < bump_width; i++)
@@ -179,11 +182,17 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
   int best_bpm_phase = 0;
   float best_bpm_sum = 0;
 
+  int last_val = 0;
+  int last_gradient = 0;
+  int bests[3] = {0};
+  float bests_vals[3] = {0};
+
+
   for (int bpm = 80; bpm <= 180; bpm += 1)
   {
     //  Serial.printf("----------- %d bpm ----------\n", bpm);
       const int max_phases = fsamp * 60 / bpm;
-      const int num_phases = min( 8, max_phases );
+      const int num_phases = min(32, max_phases );
 
       int best_phase = 0;
       float best_phase_sum = 0;
@@ -238,15 +247,81 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
         best_bpm_phase = best_phase;
         best_bpm = bpm;
       }
+  //    Serial.printf("%.0f, ", best_phase_sum);
+
+
+      int this_gradient = best_phase_sum - last_val;
+      if (last_gradient > 0 && this_gradient <= 0)
+      {
+          // last was local peak
+          int peak_bpm = bpm - 1;
+          int peak_val = last_val;
+
+          if (peak_val >= bests_vals[0])
+          {
+            bests[2] = bests[1];
+            bests[1] = bests[0];
+            bests[0] = peak_bpm;
+            bests_vals[2] = bests_vals[1];
+            bests_vals[1] = bests_vals[0];
+            bests_vals[0] = peak_val;
+          }
+          else if (peak_val >= bests_vals[1])
+          {
+            bests[2] = bests[1];
+            bests[1] = peak_bpm;
+            bests_vals[2] = bests_vals[1];
+            bests_vals[1] = peak_val;
+          }
+          else if (peak_val > bests_vals[2])
+          {
+            bests[2] = peak_bpm;
+            bests_vals[2] = peak_val;
+          }
+      }
+      last_val = best_phase_sum;
+      last_gradient = this_gradient;
+
+
   }
 
-  // Serial.println(0);
+  Serial.println("");
   // Serial.println(0);
   // Serial.println(0);
 
-  Serial.printf("Best %d bpm with phase %d\n", best_bpm, best_bpm_phase );
+  Serial.printf("Best %d bpm with phase %d - conf %.2f\n", best_bpm, best_bpm_phase, best_bpm_sum/1000 );
+  Serial.printf(" -- %d (%.0f) >= %d (%.0f) >= %d (%.0f)\n", bests[0], bests_vals[0], bests[1], bests_vals[1], bests[2], bests_vals[2] );
+
+  int best_best = bests[0];
+  if (bests[1] > best_best) best_best = bests[1];
+  if (bests[2] > best_best) best_best = bests[2];
+
+  static float av_best = best_best;
+  av_best = (31 * av_best + best_best) / 32;
+
+  Serial.printf(" ---- best_best %d,  av %.1f\n", best_best, av_best);
+
+
+
+  int beat_interval = fsamp * 60 / best_bpm;
+
+  int bump_pos = 0;
+  for (int i = 0; true; i++)
+  {
+      bump_pos  = i * fsamp * 60 / best_bpm + best_bpm_phase;
+      if (bump_pos > num_powers)
+        break;
+  }
+  bump_pos -= num_powers;
+
+  global_next_beat = bump_pos;
+  global_beat_int = beat_interval;
+  Serial.println( beat_interval);
+
   (void)best_bpm;
   (void)best_bpm_phase;
+
+//  global_beat = 100;
 }
 
 
@@ -277,7 +352,7 @@ void vu_task_fn( void* vu_x )
   in.begin(config);
 
 
-  const int chunk_size = 512; // must be a multiple of sub_chunk_size
+  const int chunk_size = 256; // must be a multiple of sub_chunk_size
   const int sub_chunk_size = config.buffer_size; // smaller sub-chunks keep the VU meter more responsive
   int16_t *sample_buf = (int16_t *)malloc(sub_chunk_size * sizeof(int16_t));
   int chunk_fill = 0;
@@ -285,10 +360,11 @@ void vu_task_fn( void* vu_x )
   const int fsamp = config.sample_rate / chunk_size;
       // about 39Hz (-> 25.6 ms) with 512-long chunks at 20kHz sample rate
 
-  const int window_length = fsamp * 6; // 3 second windows; 76 chunks long
+  const int window_length = fsamp * 6; // 3 second windows; 76 chunks long  -- uh... 6
   int32_t *powers = (int32_t *)malloc(window_length * sizeof(int32_t));
+  int32_t *powers2 = (int32_t *)malloc(window_length * sizeof(int32_t));
   int num_powers = 0;
-  
+
   uint32_t power_acc = 0;
     // samples are stored as signed 16-bit, but really only 12-bits of resolution,
     // so 512 squared values is  2^9 * 2^11 * 2^11 = 2^31.  Phew!  Just fits :)
@@ -322,20 +398,41 @@ void vu_task_fn( void* vu_x )
 
       num_loops++;
         // cound full chunks as a loop, rather than sub-chunks, because that's what we really care about
+
+
+      if (global_next_beat > 0)
+      {
+        global_next_beat--;
+      }
+      else
+      {
+        Serial.println("beat");
+        global_beat = 100;
+        global_next_beat = global_beat_int;
+      }
     }
 
     if (num_powers == window_length)
     {
+      memcpy(&powers2[0], &powers[window_length/4], (num_powers-window_length/4)*sizeof(int32_t));
+
       find_beats( powers, num_powers, fsamp );
-      num_powers = 0; // reset
+
+      num_powers -= window_length / 4;
+
+      memcpy(&powers[0], &powers2[0], num_powers*sizeof(int32_t));
+
+      //num_powers = 0;
     }
+
+
 
 
 #if 1
     long now = millis();
     if (now - last >= 5000) // report every five seconds
     {
-      Serial.printf("%d loops in %ld ms --> %.2f Hz\n", num_loops, (now-last), 1000.0 * num_loops / (now-last) );
+      //Serial.printf("%d loops in %ld ms --> %.2f Hz\n", num_loops, (now-last), 1000.0 * num_loops / (now-last) );
       num_loops = 0; // reset
       last = now;
     }
@@ -568,7 +665,7 @@ void button_fn ( ButtonInput::Event e, int count )
   else if (e == ButtonInput::Press)
     cycle_pattern();
 
-  digitalWrite( outputs::pixels_en_pin, on );
+  digitalWrite( outputs::pixels_en_N_pin, !on );
   digitalWrite( outputs::mic_vdd_pin, on );
 }
 
