@@ -12,7 +12,20 @@ public:
   virtual uint32_t pixel( unsigned int i ) = 0;
   virtual void activate() { }
   virtual void deactivate() { }
+  virtual int interval_ms() { return 10; }
   virtual ~PixelPattern() = 0;
+
+  void advance_( int inc_ms )
+  {
+    inc_acc += inc_ms;
+    if (inc_acc >= interval_ms())
+    {
+      advance();
+      inc_acc = 0;
+    }
+  }
+private:
+  int inc_acc;
 
 protected:
   static uint32_t colour( uint8_t r, uint8_t g, uint8_t b )

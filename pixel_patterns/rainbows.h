@@ -5,11 +5,15 @@
 class CycleRainbowPattern : public PixelPattern
 {
 public:
-  CycleRainbowPattern( ) : j{ 0 } { }
+  CycleRainbowPattern( )
+    : j{ 0 }
+    { }
+
+  virtual int interval_ms() { return 1000; }
 
   virtual void advance( int inc )
   {
-    j += inc;
+    j += 50;
   }
   virtual uint32_t pixel( unsigned int i )
   {

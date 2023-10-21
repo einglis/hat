@@ -3,19 +3,12 @@
 #include <arduinoFFT.h>
 #include "../pixel_pattern.h"
 
-#define SAMPLES         64   // Must be a power of 2. Don't use sample 0 and only first SAMPLES/2 are usable.
-#define SAMPLING_FREQ   80000 // Hz, must be 40000 or less due to ADC conversion time.
-#define NOISE           500   // Used as a crude noise filter, values below this are ignored
-
 class FFTPattern : public PixelPattern
 {
 public:
   FFTPattern( int en_pin, int input_pin )
-    : fft{ vReal, vImag, SAMPLES, SAMPLING_FREQ }
-    , en_pin{ en_pin }
+    : en_pin{ en_pin }
     , mic_pin{ input_pin }
-    , min{ 1000 }
-    , max{ 0 }
   { }
 
   virtual void activate()
@@ -29,106 +22,9 @@ public:
     //digitalWrite( en_pin, LOW );
   }
 
-  virtual void advance2( int /*inc*/ )
+  virtual void advance( int /*inc*/ )
   {
-    static int k = 0;
-    k++;
-    if (k == 1000)
-    {
-      Serial.println("1k");
-      k = 0;
-    }
 
-    //  unsigned int sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQ));
-
-    for (auto i = 0; i < SAMPLES; i++)
-    {
-      newTime = micros();
-      vReal[i] = analogRead( mic_pin ); // A conversion takes about 9.7uS on an ESP32
-      vImag[i] = 0;
-      //while ((micros() - newTime) < sampling_period_us) { /* chill */ }
-    }
-
-    float sum = 0.0;
-    for (auto i = 0; i < SAMPLES; i++)
-      sum = vReal[i] * vReal[i];
-    //Serial.print("sum sq: ");
-    //Serial.print(sum);
-    //Serial.print(", av: ");
-
-    sum /= SAMPLES;
-    //Serial.print(sum);
-    //Serial.print(", sqrt: ");
-    sum = sqrt(sum);
-    //Serial.print(sum);
-    // sum now expected in range 0..4096
-
-    //Serial.print(", new: ");
-
-
-    float vu__ = sum;
-
-    // long terms
-    if (sum > max)
-      max = sum;
-    else
-      max *= 0.99;
-
-    if (sum < min)
-      min = sum;
-    else
-      min /= 0.99;
-
-    static int x = 0;
-    x++;
-    if (x > 100)
-    {
-        Serial.println(min);
-        Serial.println(max);
-        x = 0;
-    }
-
-
-    if (vu__ > vu)
-      vu = vu__;
-    else
-      vu = (63 * (long)vu + vu__) / 64;
-
-
-    vu2 = vu;
-     if ((vu2 - 170) > 0)
-      vu2 -= 170;
-    else
-      vu2 = 0;
-
-    vu2 /= 6;// vu2 * NUM_PIXELS * 8 / 4096;
-    //Serial.print(sum);
-
-
-    auto max = 0;
-    for (auto i = 0; i < SAMPLES; i++)
-      if (vReal[i] > max)
-        max = vReal[i];
-    //Serial.print(", max: ");
-
-  //  Serial.println(vu);
-
-    // maths!
-    // fft.DCRemoval();
-    // fft.Windowing( FFT_WIN_TYP_HAMMING, FFT_FORWARD );
-    // fft.Compute( FFT_FORWARD );
-    // fft.ComplexToMagnitude();
-  }
-
- virtual void advance( int /*inc*/ )
-  {
-    static int k = 0;
-    k++;
-    if (k == 1000)
-    {
-      Serial.println("leds 1k");
-      k = 0;
-    }
 
     int raw_vu = global_vu / 32;
 
@@ -142,8 +38,7 @@ public:
     }
     else
     {
-        // 10 or less is very rapid; 30 is a bit sluggish
-      if (dec == 16 && vu2)
+      if (dec == 3 && vu2)
       {
         vu2 -= 1;//= (31*vu2+raw_vu)/32;
         dec = 0;
@@ -152,9 +47,16 @@ public:
       dec++;
     }
 
-    if (global_beat > 0)
-      global_beat--;
 
+    if (global_beat != last_global_beat)
+    {
+      last_global_beat = global_beat;
+      beat_sustain = 16;
+    }
+    else if (beat_sustain > 0)
+    {
+    beat_sustain--;
+    }
   }
 
   virtual uint32_t pixel( unsigned int i )
@@ -164,8 +66,8 @@ public:
 
 
     if (i < 4 || i >= NUM_PIXELS - 4)
-      if (global_beat)
-        return 0xffffff;
+      if (beat_sustain)
+        return beat_sustain*0x0f0f0f;
 
 
     int pos = 0;
@@ -191,28 +93,12 @@ public:
       return col;
     else
       return 0;
-
-    if (i > mid && (i-mid)<=vu)
-      return col;
-    else if (i < mid && (mid-i)<=vu)
-      return col;
-    else
-      return 0;
-    //Serial.println( vReal[i] );
-    return vReal[i] / 100;
   }
 
 private:
-  arduinoFFT fft;
   int en_pin;
   int mic_pin;
-  float vu;
-  float min;
-  float max;
   int vu2;
-
-  double vReal[SAMPLES];
-  double pReal[SAMPLES];
-  double vImag[SAMPLES];
-  unsigned long newTime;
+  int last_global_beat;
+  int beat_sustain;
 };

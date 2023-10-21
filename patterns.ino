@@ -73,7 +73,7 @@ uint32_t mix( uint32_t a, uint32_t b, unsigned int amnt)
     return x;
 }
 
-bool pixels_update( Adafruit_NeoPixel &strip )
+bool pixels_update( Adafruit_NeoPixel &strip, int interval_ms )
 {
   PixelPattern* pattern = pixel_patterns[ curr_pattern ];
   PixelPattern* pattern_outgoing = pixel_patterns[ prev_pattern ];
@@ -82,8 +82,8 @@ bool pixels_update( Adafruit_NeoPixel &strip )
   {
       if (pattern && pattern_outgoing)
       {
-          pattern->advance( pattern_phase_inc );
-          pattern_outgoing->advance( pattern_phase_inc );
+          pattern->advance_( interval_ms );
+          pattern_outgoing->advance_( interval_ms );
           for (auto i = 0; i < strip.numPixels(); i++)
               strip.setPixelColor( i, mix(pattern_outgoing->pixel(i), pattern->pixel(i),transition_count) );
       }
@@ -92,13 +92,13 @@ bool pixels_update( Adafruit_NeoPixel &strip )
   {
       if (pattern)
       {
-          pattern->advance( pattern_phase_inc );
+          pattern->advance_( interval_ms );
           for (auto i = 0; i < strip.numPixels(); i++)
               strip.setPixelColor( i, pattern->pixel(i) );
       }
   }
 
-  return true;
+  return true; // currently ignored
 }
 
 // ----------------------------------------------------------------------------

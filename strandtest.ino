@@ -56,11 +56,25 @@ FFTPattern fft_basic( outputs::mic_vdd_pin, inputs::mic_pin );
 // ------------------------------------
 
 Ticker pixel_ticker;
+const int pixel_ticker_interval_ms = 3;
+  // a full pixel update takes 1.7ms,
+  // but back to back the minimum is 2.3ms.
+
 void pixel_ticker_fn( )
 {
-  bool need_update = pixels_update( strip );
-  if (need_update)
-    strip.show();
+  pixels_update( strip, pixel_ticker_interval_ms );
+  strip.show();
+
+  static int k = 0;
+  static int start = millis();
+  k++;
+  if (k == 1000)
+  {
+    long now = millis();
+    Serial.printf("leds at %ld Hz\n", 1000000/(now-start));
+    start = now;
+    k = 0;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -104,14 +118,11 @@ void setup()
 //pixel_patterns.push_back( &sparkle_white );
 //  pixel_patterns.push_back( &sparkle_red );
 //pixel_patterns.push_back( &sparkle_yellow );
-  //pixel_patterns.push_back( &fft_basic );
+  pixel_patterns.push_back( &fft_basic );
 
-  pixel_ticker.attach_ms( 10, pixel_ticker_fn );
+  pixel_ticker.attach_ms( pixel_ticker_interval_ms, pixel_ticker_fn );
 
-  Serial.print("loop() running on core ");
-  Serial.println(xPortGetCoreID());
-
-  //start_vu_task( );
+  start_vu_task( );
 }
 
 
@@ -302,6 +313,8 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
   Serial.printf(" ---- best_best %d,  av %.1f\n", best_best, av_best);
 
 
+  if (!best_bpm)
+    best_bpm = 1; // avoid divide by zero in laziest possible way
 
   int beat_interval = fsamp * 60 / best_bpm;
 
@@ -320,8 +333,6 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
 
   (void)best_bpm;
   (void)best_bpm_phase;
-
-//  global_beat = 100;
 }
 
 
@@ -407,7 +418,7 @@ void vu_task_fn( void* vu_x )
       else
       {
         Serial.println("beat");
-        global_beat = 100;
+        global_beat++;
         global_next_beat = global_beat_int;
       }
     }
@@ -672,7 +683,6 @@ void button_fn ( ButtonInput::Event e, int count )
 // loop() function -- runs repeatedly as long as board is on ---------------
 
 void loop() {
-  pixel_ticker_fn();
   return;
   int adc_raw = analogRead( inputs::mic_pin );
   Serial.println(adc_raw);
