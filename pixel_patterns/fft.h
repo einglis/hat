@@ -6,45 +6,25 @@
 class FFTPattern : public PixelPattern
 {
 public:
-  FFTPattern( int en_pin, int input_pin )
-    : en_pin{ en_pin }
-    , mic_pin{ input_pin }
-  { }
-
-  virtual void activate()
-  {
-    // enable mic
-    //digitalWrite( en_pin, HIGH );
-  }
-  virtual void deactivate()
-  {
-    // disable mic
-    //digitalWrite( en_pin, LOW );
-  }
+  FFTPattern( ) { }
 
   virtual void advance( int /*inc*/ )
   {
-
-
     int raw_vu = global_vu / 32;
-
-
-    static int dec = 10;
-
-    if (raw_vu > vu2)
+    if (raw_vu > my_vu)
     {
-      vu2 = raw_vu;
-      dec = 0;
+      my_vu = raw_vu;
+      my_vu_decay = 0;
     }
     else
     {
-      if (dec == 3 && vu2)
+      if (my_vu > 0 && my_vu_decay == 3) // magic number
       {
-        vu2 -= 1;//= (31*vu2+raw_vu)/32;
-        dec = 0;
+        my_vu -= 1;
+        my_vu_decay = 0;
       }
 
-      dec++;
+      my_vu_decay++;
     }
 
 
@@ -77,7 +57,7 @@ public:
     else if (i > mid)
       pos = i - mid;
 
-    int bright = vu2 * 10;
+    int bright = my_vu * 10;
     if (bright > 255)
       bright = 255;
 
@@ -89,16 +69,15 @@ public:
 
 
 
-    if (vu2 && pos < (vu2-1))
+    if (my_vu && pos < (my_vu-1))
       return col;
     else
       return 0;
   }
 
 private:
-  int en_pin;
-  int mic_pin;
-  int vu2;
+  int my_vu;
+  int my_vu_decay;
   int last_global_beat;
   int beat_sustain;
 };

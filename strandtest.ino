@@ -51,7 +51,7 @@ SparklePattern sparkle_red( 0x010000 );
 SparklePattern sparkle_yellow( 0x010100 );
 
 #include "pixel_patterns/fft.h"
-FFTPattern fft_basic( outputs::mic_vdd_pin, inputs::mic_pin );
+FFTPattern fft_basic;
 
 // ------------------------------------
 
