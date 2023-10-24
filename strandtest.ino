@@ -65,6 +65,7 @@ void pixel_ticker_fn( )
   pixels_update( strip, pixel_ticker_interval_ms );
   strip.show();
 
+  #if 0
   static int k = 0;
   static int start = millis();
   k++;
@@ -75,6 +76,7 @@ void pixel_ticker_fn( )
     start = now;
     k = 0;
   }
+  #endif
 }
 
 // ----------------------------------------------------------------------------
@@ -111,7 +113,7 @@ void setup()
   button.begin( button_fn );
 
 
-  pixel_patterns.push_back( &rainbow1 );
+//  pixel_patterns.push_back( &rainbow1 );
 //  pixel_patterns.push_back( &rainbow2 );
 //  pixel_patterns.push_back( &snakes );
 //pixel_patterns.push_back( &random_colours );
@@ -171,6 +173,11 @@ int global_beat_int = 10000;
 
 void find_beats( int32_t *powers, const int num_powers, const int fsamp )
 {
+//  for (int i = 0; i < num_powers; i++)
+//    Serial.println(powers[i]);
+
+
+
   const int bump_width = 8;
   static int bump[ bump_width ] = { 0 };
 
@@ -189,9 +196,9 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
 
 
 
-  int best_bpm = 0;
-  int best_bpm_phase = 0;
-  float best_bpm_sum = 0;
+  // int best_bpm = 0;
+  // int best_bpm_phase = 0;
+  // float best_bpm_sum = 0;
 
   int last_val = 0;
   int last_gradient = 0;
@@ -199,19 +206,17 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
   float bests_vals[3] = {0};
 
 
+  float bpms_max[101];
+  float bpms_min[101];
+  int bpms_pos[101];
+
   for (int bpm = 80; bpm <= 180; bpm += 1)
   {
     //  Serial.printf("----------- %d bpm ----------\n", bpm);
       const int max_phases = fsamp * 60 / bpm;
       const int num_phases = min(32, max_phases );
 
-      int best_phase = 0;
-      float best_phase_sum = 0;
-
-      int max_bumps = num_powers * bpm / fsamp / 60 - 1;
-      //Serial.printf("expect %d max bumps\n", max_bumps);
-        // XXXEDD: return to this
-
+      float phases[ num_phases ];
 
       for (int p = 0; p < num_phases; p++)
       {
@@ -233,32 +238,48 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
             }
           }
 
-          // bump is 8 wide; assume 8 * 256 = 2048 == 2^11
-          // and we have 8 ish bumps --> 2^14
-          // powers are of the order 2^22
-          // so one phase --> 2^36; // need to decimate the powers a bit
-          // except somehow it seems to be 2^42!
-
-          //Serial.printf("phase %d, sum %f, bumps %d, last at %d\n", phase, sum/num_bumps, num_bumps, num_bumps * fsamp * 60 / bpm + phase);
-          sum /= num_bumps; // normalise
-
-          if (sum > best_phase_sum)
-          {
-            best_phase_sum = sum;
-            best_phase = phase;
-          }
-
+          phases[p] = sum / num_bumps;  // divide to normalise
       }
-     // Serial.printf("%3d bpm - %f\n", bpm, best_phase_sum);
-      //Serial.printf("%f\n",best_phase_sum);
 
+      float min_phase_val = phases[0];
+      float max_phase_val = 0;
+      int max_phase_pos = 0;
+
+      for (int i = 0; i < num_phases; i++)
+      {
+        if (phases[i] > max_phase_val)
+        {
+          max_phase_val = phases[i];
+          max_phase_pos = i * (max_phases/num_phases);
+        }
+        if (phases[i] < min_phase_val)
+          min_phase_val = phases[i]; // don't care where though
+      }
+
+      //Serial.printf("%3d bpm - %.0f - %.0f at %d\n", bpm, min_phase_val, max_phase_val, max_phase_pos);
+      bpms_min[ bpm - 80 ] = min_phase_val;
+      bpms_max[ bpm - 80 ] = max_phase_val;
+      bpms_pos[ bpm - 80 ] = max_phase_pos;
+  }
+#if 0
+  for (int i = 0; i < 95; i++) // nice for the Arduino graph :)
+    Serial.printf("%.0f, %0.f, %0.f\n ", bpms_max[i], bpms_min[i], max((float)0.0, bpms_max[i]-bpms_min[i]));
+
+  for (int i = 0; i < 5; i++)
+    Serial.println("0,0,0");
+#endif
+
+  (void)bpms_min;
+  (void)bpms_max;
+  (void)bpms_pos;
+
+#if 0
       if (best_phase_sum > best_bpm_sum)
       {
         best_bpm_sum = best_phase_sum;
         best_bpm_phase = best_phase;
         best_bpm = bpm;
       }
-  //    Serial.printf("%.0f, ", best_phase_sum);
 
 
       int this_gradient = best_phase_sum - last_val;
@@ -293,16 +314,30 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
       last_val = best_phase_sum;
       last_gradient = this_gradient;
 
+      bpms[bpm-80] = best_phase_sum;
+      bpms_n[bpm-80] = phases[ (best_bpm_phase + num_phases / 2)%num_phases ];
 
   }
 
-  Serial.println("");
-  // Serial.println(0);
-  // Serial.println(0);
 
+
+  float av_sum = 0.0;
+  for (auto i : bpms)
+    av_sum += i;
+
+  av_sum /= (sizeof(bpms)/sizeof(bpms[0]));
+
+#if 1
+  for (int i = 0; i < 101; i++)
+    Serial.printf("%.0f, %0.f, %.0f\n ", bpms[i], bpms_n[i], bpms[i]-bpms_n[i]);
+  Serial.println("0,0,0");
+  Serial.println("0,0,0");
+  Serial.println("0,0,0");
+  Serial.println("0,0,0");
+  #else
   Serial.printf("Best %d bpm with phase %d - conf %.2f\n", best_bpm, best_bpm_phase, best_bpm_sum/1000 );
   Serial.printf(" -- %d (%.0f) >= %d (%.0f) >= %d (%.0f)\n", bests[0], bests_vals[0], bests[1], bests_vals[1], bests[2], bests_vals[2] );
-
+#endif
   int best_best = bests[0];
   if (bests[1] > best_best) best_best = bests[1];
   if (bests[2] > best_best) best_best = bests[2];
@@ -310,29 +345,45 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
   static float av_best = best_best;
   av_best = (31 * av_best + best_best) / 32;
 
-  Serial.printf(" ---- best_best %d,  av %.1f\n", best_best, av_best);
+//  Serial.printf(" ---- best_best %d,  av %.1f\n", best_best, av_best);
 
+#endif
 
-  if (!best_bpm)
-    best_bpm = 1; // avoid divide by zero in laziest possible way
+  int best_bpm = 0;
+  float best_bpm_val = bpms_max[0];
+  int best_bpm_pos = bpms_pos[0];
 
-  int beat_interval = fsamp * 60 / best_bpm;
+  for (int i = 0; i < 101; i++)
+  {
+    float t = max((float)0.0, bpms_max[i]-bpms_min[i]);
+    if (t > best_bpm_val)
+    {
+      best_bpm_val = t;
+      best_bpm_pos = bpms_pos[i];
+      best_bpm = i;
+    }
+  }
+
+  best_bpm += 80;
+
+  int beat_interval = (fsamp * 60 + best_bpm/2 ) / best_bpm;
 
   int bump_pos = 0;
   for (int i = 0; true; i++)
   {
-      bump_pos  = i * fsamp * 60 / best_bpm + best_bpm_phase;
+      bump_pos  = i * fsamp * 60 / best_bpm + best_bpm_pos;
       if (bump_pos > num_powers)
         break;
   }
   bump_pos -= num_powers;
 
+  Serial.printf( "best bpm: %d  next is %d -> %d, interval %d\n", best_bpm, global_next_beat, bump_pos, beat_interval);
   global_next_beat = bump_pos;
   global_beat_int = beat_interval;
-  Serial.println( beat_interval);
 
-  (void)best_bpm;
-  (void)best_bpm_phase;
+//  (void)best_bpm;
+//  (void)best_bpm_phase;
+//  (void)bpms_n;
 }
 
 
@@ -355,7 +406,7 @@ void vu_task_fn( void* vu_x )
     // 20 kHz is more than adequate since we're only using powers not FFTs
   config.bits_per_sample = 16;
   config.channels = 1;
-  config.buffer_size = 64; // smaller buffers give us smoother extraction
+  config.buffer_size = 128; // smaller buffers give us smoother extraction
   config.buffer_count = 8; // probably overkill
 
 
@@ -364,14 +415,15 @@ void vu_task_fn( void* vu_x )
 
 
   const int chunk_size = 256; // must be a multiple of sub_chunk_size
-  const int sub_chunk_size = config.buffer_size; // smaller sub-chunks keep the VU meter more responsive
+  const int vu_chunk_size = 128; // empirically this is a good size at 20kHz
+  const int sub_chunk_size = config.buffer_size;
   int16_t *sample_buf = (int16_t *)malloc(sub_chunk_size * sizeof(int16_t));
   int chunk_fill = 0;
 
   const int fsamp = config.sample_rate / chunk_size;
       // about 39Hz (-> 25.6 ms) with 512-long chunks at 20kHz sample rate
 
-  const int window_length = fsamp * 6; // 3 second windows; 76 chunks long  -- uh... 6
+  const int window_length = fsamp * 3; // 3 second windows; 76 chunks long
   int32_t *powers = (int32_t *)malloc(window_length * sizeof(int32_t));
   int32_t *powers2 = (int32_t *)malloc(window_length * sizeof(int32_t));
   int num_powers = 0;
@@ -384,6 +436,7 @@ void vu_task_fn( void* vu_x )
   long last = millis();
   int num_loops = 0;
 
+  uint32_t last_power_sum = 0;
 
   while(1)
   {
@@ -395,15 +448,20 @@ void vu_task_fn( void* vu_x )
       power_sum += sample_buf[i] * sample_buf[i];
     power_acc += power_sum;
 
-    // update the VU meter, regardless of what happens next
-    *((int *)vu_x) = sqrt( power_sum / sub_chunk_size ); // XXXEDD: sqrt needs attention
+    //Serial.printf("%8u, %8u\n", power_sum/sub_chunk_size, (power_sum + last_power_sum) / sub_chunk_size);
+
+    *((int *)vu_x) = max(0, (int)(150 * (log( (power_sum + last_power_sum) / sub_chunk_size / 4 ) - 8)));
+      // XXXEDD: sqrt needs attention
+      // XXXEDD: agc further to normalise display?
+
+    last_power_sum = power_sum;
 
 
     chunk_fill += sub_chunk_size;
     if (chunk_fill == chunk_size)
     {
-      powers[ num_powers++ ] += power_acc / chunk_size; // divide just to reduce magnitude a bit
-
+      //Serial.println(power_acc / chunk_size);
+      powers[ num_powers++ ] = power_acc / chunk_size; // divide just to reduce magnitude a bit
       chunk_fill = 0; // reset
       power_acc = 0; // reset
 
@@ -417,7 +475,6 @@ void vu_task_fn( void* vu_x )
       }
       else
       {
-        Serial.println("beat");
         global_beat++;
         global_next_beat = global_beat_int;
       }
@@ -425,230 +482,33 @@ void vu_task_fn( void* vu_x )
 
     if (num_powers == window_length)
     {
-      memcpy(&powers2[0], &powers[window_length/4], (num_powers-window_length/4)*sizeof(int32_t));
+      //memcpy(&powers2[0], &powers[window_length/4], (num_powers-window_length/4)*sizeof(int32_t));
 
+      //long start = millis();
       find_beats( powers, num_powers, fsamp );
+      //long end = millis();
+      //Serial.printf("find_beats() took %ld ms\n", end-start );
 
-      num_powers -= window_length / 4;
+      //num_powers -= window_length / 4;
 
-      memcpy(&powers[0], &powers2[0], num_powers*sizeof(int32_t));
+      //memcpy(&powers[0], &powers2[0], num_powers*sizeof(int32_t));
 
-      //num_powers = 0;
+      num_powers = 0;
     }
 
 
 
 
-#if 1
+#if 0
     long now = millis();
     if (now - last >= 5000) // report every five seconds
     {
-      //Serial.printf("%d loops in %ld ms --> %.2f Hz\n", num_loops, (now-last), 1000.0 * num_loops / (now-last) );
+      Serial.printf("%d loops in %ld ms --> %.2f Hz\n", num_loops, (now-last), 1000.0 * num_loops / (now-last) );
       num_loops = 0; // reset
       last = now;
     }
 #endif
   }
-
-#if 0
-
-  int kk = 0;
-
-  in.begin(config);
-
-  int16_t *buf2 = (int16_t *)malloc(4096);
-  int16_t *buf3 = (int16_t *)malloc(4096);
-
-  int16_t med[3] = { 0 };
-
-
-  int16_t my_sin[2048];
-  for (int i = 0; i < 2048; i++)
-  {
-    my_sin[i] = 255*sin(2*M_PI / 2048 * i);
-    if (my_sin[i] < 0)
-      my_sin[i] = 0;
-   // Serial.println(my_sin[i]);
-  }
-
-  while(1)
-  {
-//    if (in.available() < 1024)
-//      continue;
-   // Serial.println(in.available());
-
-   int k = millis();
-    //size_t rc = in.readBytes(buf, 512*sizeof(int16_t)); // approx 10.7ms at 48kHz.
-      // 512 is nominal FFT size.
-      // but could collect smaller chunks for the VU meter.
-
-    size_t rc = in.readBytes((uint8_t*)buf, 64*sizeof(int16_t)); // approx 5.2ms at 48kHz.
-     int j = millis();
-
-    for (int i = 0; i < rc/2; i++)
-    {
-      med[0] = med[1];
-      med[1] = med[2];
-      med[2] = buf[i];
-
-
-      const int &a = med[0];
-      const int &b = med[1];
-      const int &c = med[2];
-
-      int16_t m = 0;
-
-      if (a <= b && a <= c)
-        m = (b <= c) ? b : c;
-      else if (b <= a && b <= c)
-        m = (a <= c) ? a : c;
-      else
-        m = (a <= b) ? a : b;
-
-      buf2[i] = m;
-
-      //Serial.printf("%d %d %d -> %d\n", a,b,c,m);
-
-    }
-
-
-
-//     Serial.printf("%u, %d\n", 0, j-k);
-    //rc = in.readBytes(buf2, 4096);
-    //rc = in.readBytes(buf, sizeof(buf));
-    //rc = in.readBytes(buf, sizeof(buf));
-    //rc = in.readBytes(buf, sizeof(buf));
-   // Serial.println(in.available());
-   // Serial.println("");
-    (void)rc;
-
-
-if(0)
-{
-      Serial.println("2000, 2000");
-
-    for (int i = 0; i < rc/2; i += 1)
-        Serial.printf("%d, %d\n", buf[i], buf2[i] );
-
-      Serial.println("-2000, -2000");
-}
-
-
-  // calculate power
-
-    int32_t sum = 0;
-      // 256 * int16 * int16 == 1 billion; eg fits in a 32-bit int.
-
-    for (int i = 0; i < rc/2; i++)
-      sum += buf2[i] * buf2[i];
-
-    int vu = sqrt( sum / rc / 2 );
-
-    //Serial.printf("%d %d\n", sum, vu );
-
-    int bpm = 125;
-
-
-   // Serial.println( 30000 * my_sin[(int)(2*1.3*kk)%2048 ] );
-    buf3[kk] = vu;
-
-    global_vu = vu;
-
-
-   kk++;
-    if (kk == 2048)
-    {
-      Serial.println("task 2 ki");
-      kk = 0;
-
-      for (int bpm = 80; bpm <= 180; bpm += 10)
-      {
-        int bpm_max = 0;
-        int bpm_max_phase = 0;
-
-        int sin_inc = bpm * 1.3 / 60;
-//        double sin_factor = 0.000136135 * bpm;
-    //Serial.println( 30000 * sin( 0.017*kk) );
-
-
-
-        for (int phase = 0; phase < 2048; phase++)
-        {
-          int i_pulse = 0;
-//          int pulse_pos = 0;
-
-          int sum = 0;
-
-          //while (pulse_pos < 2048 && i_pulse < 5)
-          {
-            int nn = 0;
-            for (int s = 0; s < 2028; s++)
-            {
-              nn = s * bpm * 1.3 / 60;
-
-
-
-              int ss = my_sin[(nn)%2048 ];
-              sum +=  ss * buf3[(phase+s)%2048];
-
-              //nn += sin_inc;
-              i_pulse = nn / 2048;
-              if (i_pulse >= 5)
-                break;
-
-            }
-
-            // sum +=  5 * buf3[(pulse_pos+phase+2047)%2048];
-            // sum += 10 * buf3[(pulse_pos+phase)%2048];
-            // sum +=  5 * buf3[(pulse_pos+phase+1)%2048];
-
-            // i_pulse++;
-            // pulse_pos = 060000 * i_pulse / bpm / 1.3;
-          }
-
-          if (sum > bpm_max)
-          {
-            bpm_max = sum;
-            bpm_max_phase = phase;
-          }
-
-        }
-
-        Serial.printf("BPM %3d, had max sum %d at phase %d\n", bpm, bpm_max, bpm_max_phase );
-      }
-
-
-    }
-//    delay( 1 );
-  }
-
-  int k;
-
-  while (1)
-  {
-    k++;
-    if (k == 1000)
-    {
-      Serial.println("task 1k");
-      k = 0;
-    }
-
-    #define SAMPLES 64
-
-    float sum = 0.0;
-    for (auto i = 0; i < SAMPLES; i++)
-    {
-      auto newTime = micros();
-
-      int x = analogRead( inputs::mic_pin ); // just read asap
-      sum += x * x;
-      while ((micros() - newTime) < 20) { /* chill */ }
-    }
-
-    int vu = sqrt( sum / SAMPLES );
-    *((int *)vu_x) = vu;
-  }
-  #endif
 }
 
 void start_vu_task( )

@@ -10,7 +10,7 @@ public:
 
   virtual void advance( int /*inc*/ )
   {
-    int raw_vu = global_vu / 32;
+    int raw_vu = global_vu /32;
     if (raw_vu > my_vu)
     {
       my_vu = raw_vu;
