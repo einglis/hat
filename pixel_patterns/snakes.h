@@ -9,11 +9,13 @@ class SnakesPattern : public PixelPattern
 {
 public:
   SnakesPattern( uint16_t num_pixels )
-    : num_pixels{ num_pixels }
+    : num_pixels{ (uint16_t)(3 * num_pixels / 2) } // elongate the apparent loop
     , pos{ 0, 0, 0 }
     , inc{ 3, 7, 5 }
     , dir{ 1, 1, -1 }
   { }
+
+  virtual int interval_ms() { return 50; }
 
   void advance( int )
   {
