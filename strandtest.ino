@@ -12,7 +12,10 @@ namespace outputs {
     pixels_en_N_pin = 14,
     button_en_pin = 15,
     mic_vdd_pin = 21,
-    mic_gnd_pin = 22
+    mic_gnd_pin = 22,
+
+    dotstar_en_N_pin = 13,
+    battery_serial_tx_pin = 23,
   };
 }
 namespace inputs {
@@ -25,6 +28,7 @@ namespace inputs {
     battery_adc_channel = ADC2_CHANNEL_8,
       // The natural TinyPico pin is 35, but this is on ADC1 and would interfere with the
       // mic input.  A bodge wire between MCU pins (or equivalent does the trick here.
+    battery_serial_rx_pin = 33,
   };
 }
 
@@ -91,15 +95,13 @@ void pixel_ticker_fn( )
 // ----------------------------------------------------------------------------
 
 Ticker battery_ticker;
-const int battery_ticker_interval_sec = 1;
+const int battery_ticker_interval_sec = 7; // pretty random
 
 int global_battery_mv = 0;
 int global_battery_charge = 0;
 
 void battery_ticker_fn( )
 {
-  // https://github.com/tinypico/tinypico-arduino/blob/master/TinyPICO-Helper/src/TinyPICO.cpp
-
   #define DEFAULT_VREF  1100  // reference voltage in mv
     // confirmed during development by measurement using: adc_vref_to_gpio( ADC_UNIT_2, (gpio_num_t)26 );
 
@@ -108,6 +110,8 @@ void battery_ticker_fn( )
   static bool first_time = true;
   if (first_time)
   {
+    Serial1.begin(9600, SERIAL_8N1, outputs::battery_serial_tx_pin, inputs::battery_serial_rx_pin);
+
     adc2_config_channel_atten( (adc2_channel_t)inputs::battery_adc_channel, ADC_ATTEN_11db );
     esp_adc_cal_characterize( ADC_UNIT_2, ADC_ATTEN_11db, ADC_WIDTH_BIT_12, DEFAULT_VREF, &chars);
     first_time = false;
@@ -116,29 +120,28 @@ void battery_ticker_fn( )
   int raw = 0;
   adc2_get_raw( (adc2_channel_t)inputs::battery_adc_channel, ADC_WIDTH_BIT_12, &raw );
 
-  const uint32_t mv_ = esp_adc_cal_raw_to_voltage( raw, &chars );
-  const uint32_t mv = mv_* 3.55 + 180; // calculation from tedious calibration
+  const uint32_t cal = esp_adc_cal_raw_to_voltage( raw, &chars );
+  const uint32_t mv = cal * 3.55 + 180; // calculation from tedious calibration
   global_battery_mv = (int)mv;
 
   const int charge = 100 * ((int)mv - 3100) / (4100 - 3100);  // 3.1v to 4.1v seems a conservative operating range
   global_battery_charge = min( max( charge, 0 ), 100);
 
-  Serial.printf( "Battery: ~%dmv --> %d%%\n", global_battery_mv, global_battery_charge );
-  Serial1.printf( "Battery: ~%dmv --> %d%%  %u %u\r\n", global_battery_mv, global_battery_charge, mv_, raw );
+   Serial.printf( "Battery: ~%dmv --> %d%% (raw %u, cal %u)\r\n", global_battery_mv, global_battery_charge, raw, cal );
+  Serial1.printf( "Battery: ~%dmv --> %d%% (raw %u, cal %u)\r\n", global_battery_mv, global_battery_charge, raw, cal );
 
-  #if 0
+  if (global_battery_charge == 0)
+  {
+    Serial1.printf("Sleeping shortly...\n");
+    Serial1.flush();
 
-  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
-  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
-  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
-
-  gpio_reset_pin(GPIO_NUM_2);
-  gpio_reset_pin(GPIO_NUM_9);
-  //rtc_gpio_isolate(9);
+    delay(1000);
+      // would be pretty to do some light effect, but...
 
     esp_deep_sleep_start();
+      // drops to about 20uA which close enough to expections
+      // apparently no need to disable the various GPIO enables
   }
-  #endif
 }
 
 // ----------------------------------------------------------------------------
@@ -150,14 +153,15 @@ void setup()
   Serial.println("");
   Serial.println("Hat's hat!");
 
-  Serial1.begin(115200, SERIAL_8N1, 23, 33); // TX, RX
-
   // --------------
 
   pinMode( inputs::battery_pin, INPUT );
   battery_ticker.attach( battery_ticker_interval_sec, battery_ticker_fn );
 
   // --------------
+
+  pinMode( outputs::dotstar_en_N_pin, OUTPUT );
+  digitalWrite( outputs::dotstar_en_N_pin, HIGH ); // dotstar off
 
   pinMode( outputs::pixels_pin, OUTPUT );
   pinMode( outputs::pixels_en_N_pin, OUTPUT );

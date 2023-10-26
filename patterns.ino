@@ -1,8 +1,6 @@
 
 // NOTE: hideously copied from Simple Node and thence hacked.
 
-int pattern_phase_inc = 1;
-
 int curr_pattern = 0;
 int prev_pattern = curr_pattern;
 int next_pattern = curr_pattern;
