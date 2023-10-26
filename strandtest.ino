@@ -20,8 +20,11 @@ namespace inputs {
     button_pin = 27,
     mic_pin = 32,
     mic_adc_channel = ADC1_CHANNEL_4,
+
     battery_pin = 25,
     battery_adc_channel = ADC2_CHANNEL_8,
+      // The natural TinyPico pin is 35, but this is on ADC1 and would interfere with the
+      // mic input.  A bodge wire between MCU pins (or equivalent does the trick here.
   };
 }
 
@@ -35,6 +38,7 @@ ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
 
 int global_vu;
 int global_beat = 0;
+  // used by fft pattern.  To be improved!
 
 
 #include "pixel_pattern.h"
@@ -99,10 +103,6 @@ void battery_ticker_fn( )
   #define DEFAULT_VREF  1100  // reference voltage in mv
     // confirmed during development by measurement using: adc_vref_to_gpio( ADC_UNIT_2, (gpio_num_t)26 );
 
-  #define UPPER_DIVIDER 442
-  #define LOWER_DIVIDER 160
-    // could not confirm these in-circuit, so let's just hope
-
   static esp_adc_cal_characteristics_t chars;
 
   static bool first_time = true;
@@ -116,13 +116,15 @@ void battery_ticker_fn( )
   int raw = 0;
   adc2_get_raw( (adc2_channel_t)inputs::battery_adc_channel, ADC_WIDTH_BIT_12, &raw );
 
-  const uint32_t mv = esp_adc_cal_raw_to_voltage( raw, &chars ) * (LOWER_DIVIDER + UPPER_DIVIDER) / LOWER_DIVIDER;
+  const uint32_t mv_ = esp_adc_cal_raw_to_voltage( raw, &chars );
+  const uint32_t mv = mv_* 3.55 + 180; // calculation from tedious calibration
   global_battery_mv = (int)mv;
 
   const int charge = 100 * ((int)mv - 3100) / (4100 - 3100);  // 3.1v to 4.1v seems a conservative operating range
   global_battery_charge = min( max( charge, 0 ), 100);
 
   Serial.printf( "Battery: ~%dmv --> %d%%\n", global_battery_mv, global_battery_charge );
+  Serial1.printf( "Battery: ~%dmv --> %d%%  %u %u\r\n", global_battery_mv, global_battery_charge, mv_, raw );
 
   #if 0
 
@@ -147,6 +149,8 @@ void setup()
   Serial.println("");
   Serial.println("");
   Serial.println("Hat's hat!");
+
+  Serial1.begin(115200, SERIAL_8N1, 23, 33); // TX, RX
 
   // --------------
 
