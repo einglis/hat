@@ -7,6 +7,7 @@ class FFTPattern : public PixelPattern
 {
 public:
   FFTPattern( ) { }
+  virtual const char* name() { return "VU and beat"; }
 
   virtual void advance( int /*inc*/ )
   {

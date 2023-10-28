@@ -14,6 +14,7 @@ public:
   virtual void deactivate() { }
   virtual int interval_ms() { return 10; }
   virtual ~PixelPattern() = 0;
+  virtual const char* name() { return "<unnamed>"; }
 
   void advance_( int inc_ms )
   {

@@ -15,7 +15,8 @@ public:
     , dir{ 1, 1, -1 }
   { }
 
-  virtual int interval_ms() { return 50; }
+  virtual const char* name() { return "Snakes"; }
+  virtual int interval_ms() { return 40; }
 
   void advance( int )
   {

@@ -32,11 +32,17 @@ namespace inputs {
   };
 }
 
-#define NUM_PIXELS 59 // really 60, but the last one is mostly hidden
-#define PIXEL_BRIGHTNESS 16 // full brightness (255) is: a) too much and b) will kill the battery/MCU
-
-Adafruit_NeoPixel strip( NUM_PIXELS, outputs::pixels_pin, NEO_GRB + NEO_KHZ800 );
 ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
+
+
+#define NUM_PIXELS 59 // really 60, but the last one is mostly hidden
+Adafruit_NeoPixel strip( NUM_PIXELS, outputs::pixels_pin, NEO_GRB + NEO_KHZ800 );
+
+const int brightnesses[] = { 16, 32, 64, 128, 4, 8 };
+  // full brightness (255) is: a) too much and b) will kill the battery/MCU
+const int num_brightnesses = sizeof(brightnesses) / sizeof(brightnesses[0]);
+int curr_brightness = 0;
+
 
 // ----------------------------------------------------------------------------
 
@@ -168,7 +174,7 @@ void setup()
   digitalWrite( outputs::pixels_en_N_pin, HIGH ); // pixels off
 
   strip.begin();
-  strip.setBrightness( PIXEL_BRIGHTNESS );
+  strip.setBrightness( brightnesses[0] );
   strip.clear();
   strip.show();
 
@@ -643,7 +649,13 @@ void button_fn ( ButtonInput::Event e, int count )
     Serial.printf("Now %s\n", (on)? "on":"off");
   }
   else if (e == ButtonInput::Press)
+  {
+    curr_brightness = (curr_brightness + 1) % num_brightnesses;
+    Serial.printf( "Setting brightness to %d\n", brightnesses[curr_brightness] );
+  //  strip.setBrightness( brightnesses[curr_brightness] );
+
     cycle_pattern();
+  }
 
   digitalWrite( outputs::pixels_en_N_pin, !on );
   digitalWrite( outputs::mic_vdd_pin, on );

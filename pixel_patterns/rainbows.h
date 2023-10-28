@@ -9,6 +9,7 @@ public:
     : j{ 0 }
     { }
 
+  virtual const char* name() { return "Step rainbow"; }
   virtual int interval_ms() { return 1000; }
 
   virtual void advance( int inc )
@@ -17,7 +18,7 @@ public:
   }
   virtual uint32_t pixel( unsigned int i )
   {
-    return rgb_wheel( (i+j) & 255 );
+    return rgb_wheel( (2*i+j) & 255 );
   }
 
 private:
