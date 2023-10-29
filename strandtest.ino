@@ -44,6 +44,10 @@ const int num_brightnesses = sizeof(brightnesses) / sizeof(brightnesses[0]);
 int curr_brightness = 0;
 
 
+void pixels_enable( bool en ) { digitalWrite( outputs::pixels_en_N_pin, !en ); }
+void    mic_enable( bool en ) { digitalWrite( outputs::mic_vdd_pin,      en ); }
+void button_enable( bool en ) { digitalWrite( outputs::button_en_pin,    en ); }
+
 // ----------------------------------------------------------------------------
 
 int global_vu;
@@ -72,6 +76,16 @@ SparklePattern sparkle_yellow( 0x010100 );
 #include "pixel_patterns/fft.h"
 FFTPattern fft_basic;
 
+
+#include "pixel_patterns/specials.h"
+BatteryDeadPattern dead_battery;
+BrightnessPattern brightness_pattern;
+
+void new_pattern( PixelPattern* next, bool fast = false );
+void new_pattern( PixelPattern* next, bool fast );
+  // not sure why, but this prototype doesn't otherwise get picked up.
+
+
 // ------------------------------------
 
 Ticker pixel_ticker;
@@ -98,16 +112,10 @@ void pixel_ticker_fn( )
   #endif
 }
 
-void new_pattern( PixelPattern* next, bool fast = false );
-  // not sure why, but this prototype doesn't otherwise get picked up.
-
 // ----------------------------------------------------------------------------
 
 Ticker battery_ticker;
 const int battery_ticker_interval_sec = 7; // pretty random
-
-#include "pixel_patterns/battery_dead.h"
-BatteryDeadPattern dead_battery;
 
 int global_battery_mv = 0;
 int global_battery_charge = 0;
@@ -147,8 +155,8 @@ void battery_ticker_fn( )
      Serial.printf("Sleeping shortly...\n");
     Serial1.printf("Sleeping shortly...\n");
 
-    digitalWrite( outputs::button_en_pin, LOW ); // lazy way to prevent user mode changes
-    digitalWrite( outputs::mic_vdd_pin, LOW ); // mic off
+    mic_enable( false ); // mic off
+    button_enable( false ); // lazy way to prevent user mode changes
     new_pattern( &dead_battery, true /*fast transition*/ );
       // obviously leave LEDs on to show this.
 
@@ -653,28 +661,69 @@ void start_vu_task( )
   );
 }
 
+// ----------------------------------------------------------------------------
 
-//void button_fn ( ButtonInput::Event e, int count );
+enum HatMode { ModeOff, ModeCycle, ModeBright, ModeDead };
+HatMode hat_mode = ModeOff;
+
 void button_fn ( ButtonInput::Event e, int count )
 {
-  static int on = 1;
+  static bool last_was_press = false;
 
-  if (e == ButtonInput::HoldShort)
+  if (e == ButtonInput::HoldLong)
   {
-    on = !on;
-    Serial.printf("Now %s\n", (on)? "on":"off");
+    switch (hat_mode)
+    {
+      case ModeCycle:
+      case ModeBright:
+        pixels_enable( false );
+        mic_enable( false );
+        hat_mode = ModeOff;
+        break;
+
+      default: break;
+    }
   }
-  else if (e == ButtonInput::Press)
+  else if (e == ButtonInput::HoldShort)
   {
-    curr_brightness = (curr_brightness + 1) % num_brightnesses;
-    Serial.printf( "Setting brightness to %d\n", brightnesses[curr_brightness] );
-  //  strip.setBrightness( brightnesses[curr_brightness] );
+    switch (hat_mode)
+    {
+      case ModeOff:
+        mic_enable( true );
+        pixels_enable( true );
+        // fallthrough
+      case ModeBright:
+        cycle_pattern();
+        hat_mode = ModeCycle;
+        break;
 
-    cycle_pattern();
+      case ModeCycle:
+        new_pattern( &brightness_pattern, true /*fast transition*/ );
+        hat_mode = ModeBright;
+        break;
+
+      default: break;
+    }
+  }
+  else if (e == ButtonInput::Final && last_was_press) // respond on button up, basically
+  {
+    switch (hat_mode)
+    {
+      case ModeCycle:
+        cycle_pattern();
+        break;
+
+      case ModeBright:
+        curr_brightness = (curr_brightness + 1) % num_brightnesses;
+        Serial.printf( "Setting brightness to %d\n", brightnesses[curr_brightness] );
+        strip.setBrightness( brightnesses[curr_brightness] );
+        break;
+
+      default: break;
+    }
   }
 
-  digitalWrite( outputs::pixels_en_N_pin, !on );
-  digitalWrite( outputs::mic_vdd_pin, on );
+  last_was_press = (e == ButtonInput::Press);
 }
 
 // ----------------------------------------------------------------------------
