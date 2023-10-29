@@ -3,6 +3,10 @@
 
 #include <Adafruit_NeoPixel.h>
 
+// 0x80FF00 - amazing lime green
+// 0x10FF10 - intense cyan/green
+// 0x8000FF - rich magenta
+
 // ----------------------------------------------------------------------------
 
 class PixelPattern

@@ -1,38 +1,43 @@
 
 // NOTE: hideously copied from Simple Node and thence hacked.
 
-
-// 0x80FF00 - amazing lime green
-// 0x10FF10 - intense cyan/green
-// 0x8000FF - rich magenta
-
 class DummyPattern : public PixelPattern
 {
 public:
   virtual void advance( int /*inc*/ ) { }
-  virtual uint32_t pixel( unsigned int /*i*/ ) { return 0x8000FF; }
+  virtual uint32_t pixel( unsigned int /*i*/ ) { return 0x000000; /*off*/ }
   virtual const char* name( ) { return "dummy"; }
 };
 DummyPattern dummy;
 
+//-------------------------------------
 
 PixelPattern* curr_pattern = &dummy;
 PixelPattern* prev_pattern = curr_pattern;
 PixelPattern* next_pattern = curr_pattern;
 
 int transition_count = 0;
+int transition_rate = 1;
 Ticker transition_ticker;
 
 void transition_ticker_fn( )
 {
-  if (transition_count)
-    transition_count--;
+  if (transition_count > 0 && transition_count <= transition_rate)
+  {
+    if (prev_pattern != curr_pattern)
+    {
+      Serial.printf( "deactivate: \"%s\"\n", prev_pattern->name() );
+      prev_pattern->deactivate();
+    }
+  }
 
+  transition_count = max( 0, transition_count - transition_rate );
   if (transition_count == 0)
   {
     if (next_pattern != curr_pattern)
     {
       Serial.printf( "new pattern: \"%s\" -> \"%s\"\n", curr_pattern->name(), next_pattern->name() );
+      Serial.printf( "activate: \"%s\"\n", next_pattern->name() );
       next_pattern->activate();
         // won't be called for the very first pattern; gloss over this for now.
 
@@ -40,29 +45,25 @@ void transition_ticker_fn( )
       curr_pattern = next_pattern;
       transition_count = 255;
     }
-    else
-    {
-      prev_pattern->deactivate();
-      transition_ticker.detach();
-    }
   }
 }
 
-void new_pattern( PixelPattern* next )
+void new_pattern( PixelPattern* next, bool fast )
 {
   if (next)
   {
     Serial.printf("new pattern: \"%s\"\n", next->name() );
-
     next_pattern = next;
-    transition_ticker.attach_ms( 10, transition_ticker_fn );
+
+    transition_rate = (fast) ? 32 : 2;
+      // if we're in the middle of a slow transition, the fast
+      // one will complete it rapidly then move on; this seems good.
   }
 }
 
+
 void cycle_pattern( )
 {
-  Serial.printf("cycle: looking for next after \"%s\"\n", curr_pattern->name() );
-
   auto it = pixel_patterns.begin();
   for ( ; it != pixel_patterns.end(); ++it)
   {
@@ -74,16 +75,14 @@ void cycle_pattern( )
   }
 
   if (it == pixel_patterns.end())
-  {
-    Serial.printf("cycle: no next!\n" );
     it = pixel_patterns.begin();
-  }
 
-  Serial.printf("cycle: found \"%s\"\n", (*it)->name() );
   new_pattern( *it );
 }
 
-uint32_t mix( uint32_t a, uint32_t b, unsigned int amnt)
+// ------------------------------------
+
+uint32_t mix( uint32_t a, uint32_t b, unsigned int amnt )
 {
     uint32_t x = 0;
     for (int i = 0; i < 4; i++)
@@ -102,6 +101,13 @@ uint32_t mix( uint32_t a, uint32_t b, unsigned int amnt)
 
 bool pixels_update( Adafruit_NeoPixel &strip, int interval_ms )
 {
+  static bool first_time = true;
+  if (first_time)
+  {
+    transition_ticker.attach_ms( 10, transition_ticker_fn );
+    first_time = false;
+  }
+
   PixelPattern* pattern = curr_pattern;
   PixelPattern* pattern_outgoing = prev_pattern;
 

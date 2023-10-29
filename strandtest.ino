@@ -98,10 +98,16 @@ void pixel_ticker_fn( )
   #endif
 }
 
+void new_pattern( PixelPattern* next, bool fast = false );
+  // not sure why, but this prototype doesn't otherwise get picked up.
+
 // ----------------------------------------------------------------------------
 
 Ticker battery_ticker;
 const int battery_ticker_interval_sec = 7; // pretty random
+
+#include "pixel_patterns/battery_dead.h"
+BatteryDeadPattern dead_battery;
 
 int global_battery_mv = 0;
 int global_battery_charge = 0;
@@ -138,15 +144,24 @@ void battery_ticker_fn( )
 
   if (global_battery_charge == 0)
   {
+     Serial.printf("Sleeping shortly...\n");
     Serial1.printf("Sleeping shortly...\n");
-    Serial1.flush();
 
-    delay(1000);
-      // would be pretty to do some light effect, but...
+    digitalWrite( outputs::button_en_pin, LOW ); // lazy way to prevent user mode changes
+    digitalWrite( outputs::mic_vdd_pin, LOW ); // mic off
+    new_pattern( &dead_battery, true /*fast transition*/ );
+      // obviously leave LEDs on to show this.
 
-    esp_deep_sleep_start();
-      // drops to about 20uA which close enough to expections
-      // apparently no need to disable the various GPIO enables
+    battery_ticker.attach( battery_ticker_interval_sec, []()  // can't use delay() here.
+    {
+       Serial.printf("I die :(\n");
+       Serial.flush();
+      Serial1.printf("I die :(\n");
+      Serial1.flush();
+      esp_deep_sleep_start();
+        // drops to about 20uA which close enough to expections
+        // apparently no need to disable the various GPIO enables
+    } );
   }
 }
 
@@ -178,16 +193,17 @@ void setup()
   strip.clear();
   strip.show();
 
-  pixel_patterns.push_back( &fft_basic );
   pixel_patterns.push_back( &rainbow1 );
+  pixel_patterns.push_back( &fft_basic );
 //  pixel_patterns.push_back( &rainbow2 );
   pixel_patterns.push_back( &snakes );
 //pixel_patterns.push_back( &random_colours );
 //pixel_patterns.push_back( &sparkle_white );
-  pixel_patterns.push_back( &sparkle_red );
+//pixel_patterns.push_back( &sparkle_red );
 //pixel_patterns.push_back( &sparkle_yellow );
 
   pixel_ticker.attach_ms( pixel_ticker_interval_ms, pixel_ticker_fn );
+  cycle_pattern(); // select the first pattern
 
   // --------------
 
