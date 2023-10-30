@@ -5,7 +5,7 @@
 class BatteryDeadPattern : public PixelPattern
 {
 public:
-  BatteryDeadPattern() : phase { 1 } { } 
+  BatteryDeadPattern() : phase { 1 } { }
 
   virtual const char* name() { return "Battery Dead"; }
   virtual int interval_ms() { return 500; }
@@ -26,11 +26,17 @@ private:
 class BrightnessPattern : public PixelPattern
 {
 public:
+  BrightnessPattern() : phase { 1 } { }
+
   virtual const char* name() { return "Brightness"; }
-  void advance( int ) { }
+  virtual int interval_ms() { return 500; }
+  void advance( int ) { phase = 1-phase; }
 
   virtual uint32_t pixel( unsigned int i )
   {
+    if (phase && (i == NUM_PIXELS * global_battery_charge / 100))
+      return 0x000000; // off
+
     switch (7 * i / NUM_PIXELS)
     {
       case 0: return 0xff0000; // red
@@ -42,4 +48,7 @@ public:
       default: return 0xffffff; // white
     }
   }
+
+private:
+  int phase;
 };

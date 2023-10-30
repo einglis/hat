@@ -32,28 +32,24 @@ namespace inputs {
   };
 }
 
-ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
-
-
-#define NUM_PIXELS 59 // really 60, but the last one is mostly hidden
-Adafruit_NeoPixel strip( NUM_PIXELS, outputs::pixels_pin, NEO_GRB + NEO_KHZ800 );
-
-const int brightnesses[] = { 16, 32, 64, 128, 4, 8 };
-  // full brightness (255) is: a) too much and b) will kill the battery/MCU
-const int num_brightnesses = sizeof(brightnesses) / sizeof(brightnesses[0]);
-int curr_brightness = 0;
-
-
 void pixels_enable( bool en ) { digitalWrite( outputs::pixels_en_N_pin, !en ); }
 void    mic_enable( bool en ) { digitalWrite( outputs::mic_vdd_pin,      en ); }
 void button_enable( bool en ) { digitalWrite( outputs::button_en_pin,    en ); }
 
+#define NUM_PIXELS 59 // really 60, but the last one is mostly hidden
+Adafruit_NeoPixel strip( NUM_PIXELS, outputs::pixels_pin, NEO_GRB + NEO_KHZ800 );
+
+ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
+
 // ----------------------------------------------------------------------------
 
-int global_vu;
-int global_beat = 0;
-  // used by fft pattern.  To be improved!
+int global_beat = 0; // counter
+int global_vu = 0;
 
+int global_battery_mv = 0;
+int global_battery_charge = 0; // percentage
+
+// ----------------------------------------------------------------------------
 
 #include "pixel_pattern.h"
 static std::vector< PixelPattern* >pixel_patterns;
@@ -85,7 +81,6 @@ void new_pattern( PixelPattern* next, bool fast = false );
 void new_pattern( PixelPattern* next, bool fast );
   // not sure why, but this prototype doesn't otherwise get picked up.
 
-
 // ------------------------------------
 
 Ticker pixel_ticker;
@@ -116,9 +111,6 @@ void pixel_ticker_fn( )
 
 Ticker battery_ticker;
 const int battery_ticker_interval_sec = 7; // pretty random
-
-int global_battery_mv = 0;
-int global_battery_charge = 0;
 
 void battery_ticker_fn( )
 {
@@ -175,6 +167,77 @@ void battery_ticker_fn( )
 
 // ----------------------------------------------------------------------------
 
+const int brightnesses[] = { 16, 32, 64, 128, 4, 8 };
+  // full brightness (255) is: a) too much and b) will kill the battery/MCU
+const int num_brightnesses = sizeof(brightnesses) / sizeof(brightnesses[0]);
+int curr_brightness = 0;
+
+enum HatMode { ModeOff, ModeCycle, ModeBright, ModeDead };
+HatMode hat_mode = ModeOff;
+
+
+void button_fn( ButtonInput::Event e, int count )
+{
+  static bool last_was_press = false;
+
+  if (e == ButtonInput::HoldLong)
+  {
+    switch (hat_mode)
+    {
+      case ModeCycle:
+      case ModeBright:
+        pixels_enable( false );
+        mic_enable( false );
+        hat_mode = ModeOff;
+        break;
+
+      default: break;
+    }
+  }
+  else if (e == ButtonInput::HoldShort)
+  {
+    switch (hat_mode)
+    {
+      case ModeOff:
+        mic_enable( true );
+        pixels_enable( true );
+        // fallthrough
+      case ModeBright:
+        cycle_pattern();
+        hat_mode = ModeCycle;
+        break;
+
+      case ModeCycle:
+        new_pattern( &brightness_pattern, true /*fast transition*/ );
+        hat_mode = ModeBright;
+        break;
+
+      default: break;
+    }
+  }
+  else if (e == ButtonInput::Final && last_was_press) // respond on button up, basically
+  {
+    switch (hat_mode)
+    {
+      case ModeCycle:
+        cycle_pattern();
+        break;
+
+      case ModeBright:
+        curr_brightness = (curr_brightness + 1) % num_brightnesses;
+        Serial.printf( "Setting brightness to %d\n", brightnesses[curr_brightness] );
+        strip.setBrightness( brightnesses[curr_brightness] );
+        break;
+
+      default: break;
+    }
+  }
+
+  last_was_press = (e == ButtonInput::Press);
+}
+
+// ----------------------------------------------------------------------------
+
 void setup()
 {
   Serial.begin(115200);
@@ -211,7 +274,6 @@ void setup()
 //pixel_patterns.push_back( &sparkle_yellow );
 
   pixel_ticker.attach_ms( pixel_ticker_interval_ms, pixel_ticker_fn );
-  cycle_pattern(); // select the first pattern
 
   // --------------
 
@@ -231,14 +293,21 @@ void setup()
   digitalWrite( outputs::mic_vdd_pin, HIGH ); // using GPOIs as power rails
 
   start_vu_task( );
+
+
+  button_fn( ButtonInput::HoldShort, 0 );
+    // fake a button press to get the ball rolling.
 }
 
+void loop() { }
+
+// ----------------------------------------------------------------------------
+
+int global_next_beat = 100;  // not actually global
+int global_beat_int = 100;   // not actually global
 
 
 AnalogAudioStream in;
-
-int global_next_beat = 100;
-int global_beat_int = 100;
 
 void find_beats( int32_t *powers, const int num_powers, const int fsamp )
 {
@@ -660,72 +729,3 @@ void start_vu_task( )
     0       /* core */
   );
 }
-
-// ----------------------------------------------------------------------------
-
-enum HatMode { ModeOff, ModeCycle, ModeBright, ModeDead };
-HatMode hat_mode = ModeOff;
-
-void button_fn ( ButtonInput::Event e, int count )
-{
-  static bool last_was_press = false;
-
-  if (e == ButtonInput::HoldLong)
-  {
-    switch (hat_mode)
-    {
-      case ModeCycle:
-      case ModeBright:
-        pixels_enable( false );
-        mic_enable( false );
-        hat_mode = ModeOff;
-        break;
-
-      default: break;
-    }
-  }
-  else if (e == ButtonInput::HoldShort)
-  {
-    switch (hat_mode)
-    {
-      case ModeOff:
-        mic_enable( true );
-        pixels_enable( true );
-        // fallthrough
-      case ModeBright:
-        cycle_pattern();
-        hat_mode = ModeCycle;
-        break;
-
-      case ModeCycle:
-        new_pattern( &brightness_pattern, true /*fast transition*/ );
-        hat_mode = ModeBright;
-        break;
-
-      default: break;
-    }
-  }
-  else if (e == ButtonInput::Final && last_was_press) // respond on button up, basically
-  {
-    switch (hat_mode)
-    {
-      case ModeCycle:
-        cycle_pattern();
-        break;
-
-      case ModeBright:
-        curr_brightness = (curr_brightness + 1) % num_brightnesses;
-        Serial.printf( "Setting brightness to %d\n", brightnesses[curr_brightness] );
-        strip.setBrightness( brightnesses[curr_brightness] );
-        break;
-
-      default: break;
-    }
-  }
-
-  last_was_press = (e == ButtonInput::Press);
-}
-
-// ----------------------------------------------------------------------------
-
-void loop() { }
