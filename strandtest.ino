@@ -139,12 +139,12 @@ void battery_ticker_fn( )
   const int charge = 100 * ((int)mv - 3100) / (4100 - 3100);  // 3.1v to 4.1v seems a conservative operating range
   global_battery_charge = min( max( charge, 0 ), 100);
 
-   Serial.printf( "Battery: ~%dmv --> %d%% (raw %u, cal %u)\r\n", global_battery_mv, global_battery_charge, raw, cal );
+  //Serial.printf( "Battery: ~%dmv --> %d%% (raw %u, cal %u)\r\n", global_battery_mv, global_battery_charge, raw, cal );
   Serial1.printf( "Battery: ~%dmv --> %d%% (raw %u, cal %u)\r\n", global_battery_mv, global_battery_charge, raw, cal );
 
   if (global_battery_charge == 0)
   {
-     Serial.printf("Sleeping shortly...\n");
+    //Serial.printf("Sleeping shortly...\n");
     Serial1.printf("Sleeping shortly...\n");
 
     mic_enable( false ); // mic off
@@ -154,8 +154,8 @@ void battery_ticker_fn( )
 
     battery_ticker.attach( battery_ticker_interval_sec, []()  // can't use delay() here.
     {
-       Serial.printf("I die :(\n");
-       Serial.flush();
+      //Serial.printf("I die :(\n");
+      //Serial.flush();
       Serial1.printf("I die :(\n");
       Serial1.flush();
       esp_deep_sleep_start();
@@ -309,12 +309,8 @@ int global_beat_int = 100;   // not actually global
 
 AnalogAudioStream in;
 
-void find_beats( int32_t *powers, const int num_powers, const int fsamp )
+void find_beats( const int32_t *powers, const int num_powers, const int fsamp )
 {
-  #if 0
-  for (int i = 0; i < num_powers; i++)
-    Serial.println(powers[i]);
-  #endif
 
 
   const int bump_width = 8;
@@ -325,13 +321,6 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
       bump[i] = 255 * sin( 2*M_PI * (i + 0.5) / bump_width / 2 );
 
 
-  int32_t power_av = 0;
-  for (int i = 0; i < num_powers; i++)
-    power_av += powers[i];
-  power_av /= num_powers;
-
-  for (int i = 0; i < num_powers; i++)
-    powers[i] = max( 0, powers[i] - power_av ) / 1024;
 
 
 
@@ -395,7 +384,7 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
           min_phase_val = phases[i]; // don't care where though
       }
 
-      //Serial.printf("%3d bpm - %.0f - %.0f at %d\n", bpm, min_phase_val, max_phase_val, max_phase_pos);
+      Serial.printf("%3d bpm - %.0f - %.0f at %d\n", bpm, min_phase_val, max_phase_val, max_phase_pos);
       bpms_min[ bpm - 80 ] = min_phase_val;
       bpms_max[ bpm - 80 ] = max_phase_val;
       bpms_pos[ bpm - 80 ] = max_phase_pos;
@@ -595,6 +584,48 @@ void find_beats( int32_t *powers, const int num_powers, const int fsamp )
 
 
 
+int update_vu( uint32_t power_sum, int chunk_size )
+{
+  // Some grungy, empirical maths to give a nice VU meter.  Blended over this sub-chunk and
+  // the last for reasons lost to time.  Ideall would not use an expensive log() but okay for now.
+
+  // Works well at 312-ish Hz.  (20kHz samples, 128-byte buffers -> 3.2ms)
+
+  static uint32_t last_power_sum = 0;
+
+  const int temp = max(0, (int)(150 * (log( (power_sum + last_power_sum) / chunk_size / 4 ) - 8)));
+  last_power_sum = power_sum;
+  return temp;
+}
+
+int32_t subtract_average( int32_t* src, int32_t* dst, int num )
+{
+  int32_t power_av = 0;
+  for (auto i = 0; i < num; i++)
+    power_av += src[i];
+  power_av /= num;
+
+  for (auto i = 0; i < num; i++)
+    dst[i] = max( 0, src[i] - power_av );
+
+  return power_av;
+}
+
+
+
+
+void update_beat( )
+{
+  if (global_next_beat > 0)
+  {
+    global_next_beat--;
+  }
+  else
+  {
+    global_beat++;
+    global_next_beat = global_beat_int;
+  }
+}
 
 
 TaskHandle_t vu_task;
@@ -614,17 +645,16 @@ void vu_task_fn( void* vu_x )
   config.buffer_size = 128; // smaller buffers give us smoother extraction
   config.buffer_count = 64; // lots of buffering saves us losing samples while processing
     // at 20kHz, 128 bytes of 16-bit samples takes just 3.2ms
-    // so 64 buffers gives 205ms of leeway.  A lot!
-
+    // so 64 buffers gives 205ms of leeway.  Not convinced it really does though...
 
   //AudioLogger::instance().begin(Serial, AudioLogger::Info);
   in.begin(config);
 
 
-  const int chunk_size = 256; // must be a multiple of sub_chunk_size
-  const int vu_chunk_size = 128; // empirically this is a good size at 20kHz
-  const int sub_chunk_size = config.buffer_size;
+  const int sub_chunk_size = config.buffer_size;  // a good size for a responsive VU meter
   int16_t *sample_buf = (int16_t *)malloc(sub_chunk_size * sizeof(int16_t));
+
+  const int chunk_size = 256; // must be a multiple of sub_chunk_size
   int chunk_fill = 0;
 
   const int fsamp = config.sample_rate / chunk_size;
@@ -635,79 +665,81 @@ void vu_task_fn( void* vu_x )
   int32_t *powers2 = (int32_t *)malloc(window_length * sizeof(int32_t));
   int num_powers = 0;
 
+
+  Serial.printf("  Sample rate: %dHz\n", config.sample_rate);
+  Serial.printf("  Buffer size: %d * %d, Sub-chunk size: %d --> %dHz (VU happy around 312Hz)\n",
+    config.buffer_size, config.buffer_count, sub_chunk_size, config.sample_rate / (config.buffer_size / (config.bits_per_sample / 8)));
+  Serial.printf("  fsamp: %dHz, Window length %d (%d seconds)\n", fsamp, window_length, (window_length / fsamp));
+
+
   uint32_t power_acc = 0;
     // samples are stored as signed 16-bit, but really only 12-bits of resolution,
-    // so 512 squared values is  2^9 * 2^11 * 2^11 = 2^31.  Phew!  Just fits :)
+    // so 256 squared values is  2^8 * 2^12 * 2^12 = 2^32.
+    // Strictly, this doesn't fit, but in reality it's fine.
+
+    // In any case, I've only seen max samples of 1762 by tapping the mic; far short
+    // of the expected 4095.  (Typically about 500-ish for 'silent' conditions)
 
 
   long last = millis();
   int num_loops = 0;
 
-  uint32_t last_power_sum = 0;
 
   while(1)
   {
-    size_t rc = in.readBytes((uint8_t*)sample_buf, sub_chunk_size*sizeof(int16_t));
+    (void)in.readBytes((uint8_t*)sample_buf, sub_chunk_size*sizeof(int16_t));
       // ignore the case where we get too little data; the rest of the logic should not explode, at least
 
     uint32_t power_sum = 0;
     for (int i = 0; i < sub_chunk_size; i++)
       power_sum += sample_buf[i] * sample_buf[i];
-    power_acc += power_sum;
 
-    //Serial.printf("%8u, %8u\n", power_sum/sub_chunk_size, (power_sum + last_power_sum) / sub_chunk_size);
+    *((int *)vu_x) = update_vu( power_sum, sub_chunk_size );
 
-    *((int *)vu_x) = max(0, (int)(150 * (log( (power_sum + last_power_sum) / sub_chunk_size / 4 ) - 8)));
-      // XXXEDD: sqrt needs attention
-      // XXXEDD: agc further to normalise display?
 
-    last_power_sum = power_sum;
-
+    power_acc += power_sum; // incremental calculation
 
     chunk_fill += sub_chunk_size;
     if (chunk_fill == chunk_size)
     {
-      //Serial.println(power_acc / chunk_size);
-      powers[ num_powers++ ] = power_acc / chunk_size; // divide just to reduce magnitude a bit
+      powers[ num_powers++ ] = power_acc / chunk_size / 512; // divide just to reduce magnitude a bit
+        // with typical max sample values of 1729 seen experimentally, this gives
+        // an expected max of ~6000, but typically see about half that.
+
       chunk_fill = 0; // reset
       power_acc = 0; // reset
 
+      if (num_powers == window_length) // accrued a full window
+      {
+        int av = subtract_average( powers, powers2, num_powers );
+        //Serial.printf("average %d\n", av);
+
+#if 0
+        for (auto i = 0; i < num_powers; i++)
+          Serial.printf("%d, %d\n", powers[i], powers2[i]);
+#endif
+
+        long start = millis();
+        find_beats( powers2, num_powers, fsamp );
+        long end = millis();
+        Serial.printf("find_beats() took %ld ms\n", end-start );
+          // 1 second of window takes approximately 8ms of processing
+
+        memmove(&powers[window_length/4], &powers[0], (num_powers-window_length/4)*sizeof(int32_t));
+        num_powers -= window_length / 4;
+        num_powers = 0;
+      }
+
+
+      update_beat();
+        // beat estimation has a chunk_size'd resolution, so update once a chunk
+
       num_loops++;
-        // cound full chunks as a loop, rather than sub-chunks, because that's what we really care about
-
-
-      if (global_next_beat > 0)
-      {
-        global_next_beat--;
-      }
-      else
-      {
-        global_beat++;
-        global_next_beat = global_beat_int;
-      }
-    }
-
-    if (num_powers == window_length)
-    {
-      //memcpy(&powers2[0], &powers[window_length/4], (num_powers-window_length/4)*sizeof(int32_t));
-
-//      long start = millis();
-      find_beats( powers, num_powers, fsamp );
-//      long end = millis();
-//      Serial.printf("find_beats() took %ld ms\n", end-start );
-        // 1 second of window takes approximately 8ms of processing
-
-      //num_powers -= window_length / 4;
-
-      //memcpy(&powers[0], &powers2[0], num_powers*sizeof(int32_t));
-
-      num_powers = 0;
+        // count full chunks as a loop, rather than sub-chunks, because that's what we really care about
     }
 
 
-
-
-#if 1
+#if 0
     long now = millis();
     if (now - last >= 5000) // report every five seconds
     {
