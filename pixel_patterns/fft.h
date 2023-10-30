@@ -1,6 +1,5 @@
 #pragma once
 
-#include <arduinoFFT.h>
 #include "../pixel_pattern.h"
 
 class FFTPattern : public PixelPattern
