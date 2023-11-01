@@ -323,37 +323,8 @@ int correlate_beats( const int powers[], const int num_powers, const float beat_
   const int num_phases = min( 32, (int)beat_stride ); // avoid too much work at low bpms
   int phases[ num_phases ];
 
-  Serial.printf("stride is %f\n", beat_stride);
-
   for (int p = 0; p < num_phases; p++)
   {
-    Serial.printf("\nA phase %d:  ", p );
-    float bump_pos = p * beat_stride / num_phases + 0.5;
-      // float to maintain resolution of fractional phases and strides,
-      // but decimated to an integer whenever used as an index.
-      // for proper rounding, we should add 0.5 before every conversion to
-      // int, but we can actually just do it once at the start
-
-    int sum = 0;
-    int num_bumps = 0;
-
-    while ((int)bump_pos + bump_width <= num_powers)
-    {
-      Serial.printf("%d, ", (int)bump_pos);
-      for (int i = 0; i < bump_width; i++)
-        sum += bump[i] * powers[(int)bump_pos + i];  // +0.5 for correct rounding
-
-      num_bumps++;
-      bump_pos += beat_stride;
-    };
-
-    phases[p] = sum / num_bumps;  // divide to normalise
-  }
-  Serial.println("");
-
-  for (int p = 0; p < num_phases; p++)
-  {
-    Serial.printf("\nB phase %d:  ", p );
     float bump_pos = num_powers - bump_width - p * beat_stride / num_phases + 0.5;
       // * float to maintain resolution of fractional phases and strides,
       //   but decimated to an integer whenever used as an index.
@@ -365,9 +336,8 @@ int correlate_beats( const int powers[], const int num_powers, const float beat_
     int sum = 0;
     int num_bumps = 0;
 
-    while ((int)bump_pos >= 0)
+    while ((int)bump_pos >= 0 && num_bumps < 6) // 6 bumps is 3.75s @ 80 bpm; 1.67s @ 180 bpm
     {
-      Serial.printf("%d, ", (int)bump_pos);
       for (int i = 0; i < bump_width; i++)
         sum += bump[i] * powers[(int)bump_pos + i];  // +0.5 for correct rounding
 
@@ -377,9 +347,6 @@ int correlate_beats( const int powers[], const int num_powers, const float beat_
 
     phases[p] = sum / num_bumps;  // divide to normalise
   }
-  Serial.println("");
-  Serial.println("");
-
 
   // separate out the min/max deduction purely for division of labour
   min_phase_val = phases[0];
@@ -434,7 +401,6 @@ void find_beats( const int32_t powers[], const int num_powers, const float fsamp
 
       const float beat_stride = fsamp * 60.0 / bpm;
 
-      if (bpm == 100 || bpm == 127 || bpm == 146 || bpm == 180)
       correlate_beats( powers, num_powers, beat_stride, max_phase_pos, max_phase_val, min_phase_val );
       //Serial.printf("%3d bpm - %d - %d at %d\n", bpm, min_phase_val, max_phase_val, max_phase_pos);   // human-readable
       //Serial.printf("%d, %d,%d\n", min_phase_val, max_phase_val, max(0, max_phase_val-min_phase_val));   // graphy
