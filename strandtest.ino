@@ -307,18 +307,68 @@ int global_next_beat = 100;  // not actually global
 int global_beat_int = 100;   // not actually global
 
 
-AnalogAudioStream in;
 
-void find_beats( const int32_t *powers, const int num_powers, const int fsamp )
+int correlate_beats( const int powers[], const int num_powers, const float beat_stride,
+  int& max_phase_pos, int& max_phase_val, int& min_phase_val )
 {
-
-
   const int bump_width = 8;
   static int bump[ bump_width ] = { 0 };
 
   if (bump[0] == 0) // first time
     for (int i = 0; i < bump_width; i++)
       bump[i] = 255 * sin( 2*M_PI * (i + 0.5) / bump_width / 2 );
+        // this would probably work as a square rather than half sine, but it's fine for now.
+
+
+  const int num_phases = min( 32, (int)beat_stride ); // avoid too much work at low bpms
+  int phases[ num_phases ];
+
+  for (int p = 0; p < num_phases; p++)
+  {
+    float bump_pos = p * beat_stride / num_phases;
+      // float to maintain resolution of fractional phases and strides,
+      // but decimated to an integer whenever used as an index.
+
+    int sum = 0;
+    int num_bumps = 0;
+
+    while (bump_pos + bump_width < num_powers)
+    {
+      for (int i = 0; i < bump_width; i++)
+        sum += bump[i] * powers[(int)bump_pos + i];
+
+      num_bumps++;
+      bump_pos += beat_stride;
+    };
+
+    phases[p] = 100 * sum / num_bumps;  // divide to normalise
+  }
+
+  // separate out the min/max deduction purely for division of labour
+  min_phase_val = phases[0];
+  max_phase_val = phases[0];
+  max_phase_pos = 0;
+
+  for (int p = 0; p < num_phases; p++)
+  {
+    if (phases[p] > max_phase_val)
+    {
+      max_phase_val = phases[p];
+      max_phase_pos = (int)(p * beat_stride / num_phases) + bump_width/2;
+    }
+
+    if (phases[p] < min_phase_val)
+      min_phase_val = phases[p]; // don't care where though
+  }
+
+  return max_phase_val; // why not?!
+}
+
+
+void find_beats( const int32_t powers[], const int num_powers, const int fsamp )
+{
+
+
 
 
 
@@ -326,79 +376,44 @@ void find_beats( const int32_t *powers, const int num_powers, const int fsamp )
 
   // int best_bpm = 0;
   // int best_bpm_phase = 0;
-  // float best_bpm_sum = 0;
+  // int best_bpm_sum = 0;
 
   int last_val = 0;
   int last_gradient = 0;
   int bests[3] = {0};
-  float bests_vals[3] = {0};
+  int bests_vals[3] = {0};
 
 
-  float bpms_max[101];
-  float bpms_min[101];
+  int bpms_max[101];
+  int bpms_min[101];
   int bpms_pos[101];
 
   for (int bpm = 80; bpm <= 180; bpm += 1)
   {
-    //  Serial.printf("----------- %d bpm ----------\n", bpm);
-      const int max_phases = fsamp * 60 / bpm;
-      const int num_phases = min(32, max_phases );
-
-      float phases[ num_phases ];
-
-      for (int p = 0; p < num_phases; p++)
-      {
-          const int phase = p * (max_phases/num_phases); // offset
-
-          float sum = 0;
-          int num_bumps = 0;
-          for (; num_bumps < 100; num_bumps++) // XXXEDD: move this out
-          {
-            const int bump_pos = num_bumps * fsamp * 60 / bpm + phase;
-            if (bump_pos + bump_width > num_powers)
-              break; // no room at the inn!
-
-            for (int i = 0; i < bump_width; i++)
-            {
-              sum += bump[i] * (float)powers[bump_pos + i]; // /64 to make it fit
-              //Serial.printf("phase %d, sum %f, bump %d, pwr %d, mult %f\n",
-              //  phase, sum, bump[i], powers[bump_pos + i], bump[i] * (float)powers[bump_pos + i]);
-            }
-          }
-
-          phases[p] = sum / num_bumps;  // divide to normalise
-      }
-
-      float min_phase_val = phases[0];
-      float max_phase_val = 0;
+      //  Serial.printf("----------- %d bpm ----------\n", bpm);
       int max_phase_pos = 0;
+      int max_phase_val = 0;
+      int min_phase_val = 0;
 
-      for (int i = 0; i < num_phases; i++)
-      {
-        if (phases[i] > max_phase_val)
-        {
-          max_phase_val = phases[i];
-          max_phase_pos = i * (max_phases/num_phases);
-        }
-        if (phases[i] < min_phase_val)
-          min_phase_val = phases[i]; // don't care where though
-      }
+      const float beat_stride = fsamp * 60.0 / bpm;
+      correlate_beats( powers, num_powers, beat_stride, max_phase_pos, max_phase_val, min_phase_val );
+      //Serial.printf("%3d bpm - %d - %d at %d\n", bpm, min_phase_val, max_phase_val, max_phase_pos);   // human-readable
+      //Serial.printf("%d, %d,%d\n", min_phase_val, max_phase_val, max(0, max_phase_val-min_phase_val));   // graphy
 
-      Serial.printf("%3d bpm - %.0f - %.0f at %d\n", bpm, min_phase_val, max_phase_val, max_phase_pos);
       bpms_min[ bpm - 80 ] = min_phase_val;
       bpms_max[ bpm - 80 ] = max_phase_val;
       bpms_pos[ bpm - 80 ] = max_phase_pos;
   }
 
 #if 0
-  float avav = 0;
+  int avav = 0;
   for (int i = 0; i < 101; i++) // nice for the Arduino graph :)
-    avav += max((float)0, bpms_max[i] - bpms_min[i]);
+    avav += max((int)0, bpms_max[i] - bpms_min[i]);
   avav /= 101;
 
 
   for (int i = 0; i < 95; i++) // nice for the Arduino graph :)
-    Serial.printf("%.0f, %0.f\n ", bpms_max[i], max((float)0.0, bpms_max[i]-bpms_min[i]-avav));
+    Serial.printf("%.0f, %0.f\n ", bpms_max[i], max((int)0.0, bpms_max[i]-bpms_min[i]-avav));
 
   for (int i = 0; i < 5; i++)
     Serial.println("0,0");
@@ -456,7 +471,7 @@ void find_beats( const int32_t *powers, const int num_powers, const int fsamp )
 
 
 
-  float av_sum = 0.0;
+  int av_sum = 0.0;
   for (auto i : bpms)
     av_sum += i;
 
@@ -477,7 +492,7 @@ void find_beats( const int32_t *powers, const int num_powers, const int fsamp )
   if (bests[1] > best_best) best_best = bests[1];
   if (bests[2] > best_best) best_best = bests[2];
 
-  static float av_best = best_best;
+  static int av_best = best_best;
   av_best = (31 * av_best + best_best) / 32;
 
 //  Serial.printf(" ---- best_best %d,  av %.1f\n", best_best, av_best);
@@ -485,12 +500,12 @@ void find_beats( const int32_t *powers, const int num_powers, const int fsamp )
 #endif
 
   int best_bpm = 0;
-  float best_bpm_val = bpms_max[0];
+  int best_bpm_val = bpms_max[0];
   int best_bpm_pos = bpms_pos[0];
 
   for (int i = 0; i < 101; i++)
   {
-    float t = bpms_max[i];//max((float)0.0, bpms_max[i]-bpms_min[i]);
+    int t = bpms_max[i];//max((int)0.0, bpms_max[i]-bpms_min[i]);
     if (t > best_bpm_val)
     {
       best_bpm_val = t;
@@ -647,7 +662,7 @@ void vu_task_fn( void* vu_x )
     // at 20kHz, 128 bytes of 16-bit samples takes just 3.2ms
     // so 64 buffers gives 205ms of leeway.  Not convinced it really does though...
 
-  //AudioLogger::instance().begin(Serial, AudioLogger::Info);
+  AnalogAudioStream in;
   in.begin(config);
 
 
@@ -658,10 +673,10 @@ void vu_task_fn( void* vu_x )
   int chunk_fill = 0;
 
   const int fsamp = config.sample_rate / chunk_size;
-      // about 39Hz (-> 25.6 ms) with 512-long chunks at 20kHz sample rate
+      // about 78Hz (-> 12.8 ms) with 256-long chunks at 20kHz sample rate
 
-  const int window_length = fsamp * 4; // 3 second windows; 76 chunks long
-  int32_t *powers = (int32_t *)malloc(window_length * sizeof(int32_t));
+  const int window_length = fsamp * 4; // 4 second windows; 312 chunks long
+  int32_t *powers  = (int32_t *)malloc(window_length * sizeof(int32_t));
   int32_t *powers2 = (int32_t *)malloc(window_length * sizeof(int32_t));
   int num_powers = 0;
 
