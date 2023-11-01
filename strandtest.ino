@@ -323,26 +323,63 @@ int correlate_beats( const int powers[], const int num_powers, const float beat_
   const int num_phases = min( 32, (int)beat_stride ); // avoid too much work at low bpms
   int phases[ num_phases ];
 
+  Serial.printf("stride is %f\n", beat_stride);
+
   for (int p = 0; p < num_phases; p++)
   {
-    float bump_pos = p * beat_stride / num_phases;
+    Serial.printf("\nA phase %d:  ", p );
+    float bump_pos = p * beat_stride / num_phases + 0.5;
       // float to maintain resolution of fractional phases and strides,
       // but decimated to an integer whenever used as an index.
+      // for proper rounding, we should add 0.5 before every conversion to
+      // int, but we can actually just do it once at the start
 
     int sum = 0;
     int num_bumps = 0;
 
-    while (bump_pos + bump_width < num_powers)
+    while ((int)bump_pos + bump_width <= num_powers)
     {
+      Serial.printf("%d, ", (int)bump_pos);
       for (int i = 0; i < bump_width; i++)
-        sum += bump[i] * powers[(int)bump_pos + i];
+        sum += bump[i] * powers[(int)bump_pos + i];  // +0.5 for correct rounding
 
       num_bumps++;
       bump_pos += beat_stride;
     };
 
-    phases[p] = 100 * sum / num_bumps;  // divide to normalise
+    phases[p] = sum / num_bumps;  // divide to normalise
   }
+  Serial.println("");
+
+  for (int p = 0; p < num_phases; p++)
+  {
+    Serial.printf("\nB phase %d:  ", p );
+    float bump_pos = num_powers - bump_width - p * beat_stride / num_phases + 0.5;
+      // * float to maintain resolution of fractional phases and strides,
+      //   but decimated to an integer whenever used as an index.
+      // * start with the rightmost bump and work backwards; means we're always
+      //   looking at the newest audio, even with a truncated number of bumps
+      // * for proper rounding, we should add 0.5 before every conversion to
+      //   int, but we can actually just do it once at the start
+
+    int sum = 0;
+    int num_bumps = 0;
+
+    while ((int)bump_pos >= 0)
+    {
+      Serial.printf("%d, ", (int)bump_pos);
+      for (int i = 0; i < bump_width; i++)
+        sum += bump[i] * powers[(int)bump_pos + i];  // +0.5 for correct rounding
+
+      num_bumps++;
+      bump_pos -= beat_stride;
+    };
+
+    phases[p] = sum / num_bumps;  // divide to normalise
+  }
+  Serial.println("");
+  Serial.println("");
+
 
   // separate out the min/max deduction purely for division of labour
   min_phase_val = phases[0];
@@ -365,7 +402,7 @@ int correlate_beats( const int powers[], const int num_powers, const float beat_
 }
 
 
-void find_beats( const int32_t powers[], const int num_powers, const int fsamp )
+void find_beats( const int32_t powers[], const int num_powers, const float fsamp )
 {
 
 
@@ -396,6 +433,8 @@ void find_beats( const int32_t powers[], const int num_powers, const int fsamp )
       int min_phase_val = 0;
 
       const float beat_stride = fsamp * 60.0 / bpm;
+
+      if (bpm == 100 || bpm == 127 || bpm == 146 || bpm == 180)
       correlate_beats( powers, num_powers, beat_stride, max_phase_pos, max_phase_val, min_phase_val );
       //Serial.printf("%3d bpm - %d - %d at %d\n", bpm, min_phase_val, max_phase_val, max_phase_pos);   // human-readable
       //Serial.printf("%d, %d,%d\n", min_phase_val, max_phase_val, max(0, max_phase_val-min_phase_val));   // graphy
@@ -672,7 +711,7 @@ void vu_task_fn( void* vu_x )
   const int chunk_size = 256; // must be a multiple of sub_chunk_size
   int chunk_fill = 0;
 
-  const int fsamp = config.sample_rate / chunk_size;
+  const float fsamp = (float)config.sample_rate / chunk_size;
       // about 78Hz (-> 12.8 ms) with 256-long chunks at 20kHz sample rate
 
   const int window_length = fsamp * 4; // 4 second windows; 312 chunks long
@@ -684,7 +723,7 @@ void vu_task_fn( void* vu_x )
   Serial.printf("  Sample rate: %dHz\n", config.sample_rate);
   Serial.printf("  Buffer size: %d * %d, Sub-chunk size: %d --> %dHz (VU happy around 312Hz)\n",
     config.buffer_size, config.buffer_count, sub_chunk_size, config.sample_rate / (config.buffer_size / (config.bits_per_sample / 8)));
-  Serial.printf("  fsamp: %dHz, Window length %d (%d seconds)\n", fsamp, window_length, (window_length / fsamp));
+  Serial.printf("  fsamp: %.3fHz, Window length %d (%d seconds)\n", fsamp, window_length, (int)(window_length / fsamp));
 
 
   uint32_t power_acc = 0;
