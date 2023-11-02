@@ -371,111 +371,88 @@ int correlate_beats( const int powers[], const int num_powers, const float beat_
   return max_phase_val; // why not?!
 }
 
+void find_peaks( int vals[], const int num_vals, int peaks[], const int num_peaks )
+{
+  int pvals[ num_peaks ] = { 0 };
+
+  for (int i = 1; i < num_vals - 1; i++)
+  {
+    const int prev_gradient = vals[i] - vals[i-1];
+    const int next_gradient = vals[i+1] - vals[i];
+
+    if (prev_gradient >= 0 && next_gradient < 0) // peak or end of plateau
+    {
+      if (vals[i] > pvals[0])
+      {
+        peaks[0] = i; // new entry, at least better than previous worst
+        pvals[0] = vals[i];
+        for (int p = 1; p < num_peaks; p++) // bubble into position; fine for the small lists we're using
+        {
+          if (pvals[p] < pvals[p-1])
+          {
+            std::swap( peaks[p], peaks[p-1] );
+            std::swap( pvals[p], pvals[p-1] );
+          }
+          else
+          {
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
 
 void find_beats( const int32_t powers[], const int num_powers, const float fsamp )
 {
+  const int min_bpm =  80;
+  const int max_bpm = 180;
+  const int num_bpms = max_bpm - min_bpm + 1;
 
+  int bpms_pos[ num_bpms ];
+  int bpms_val[ num_bpms ];
 
-
-
-
-
-
-  // int best_bpm = 0;
-  // int best_bpm_phase = 0;
-  // int best_bpm_sum = 0;
-
-  int last_val = 0;
-  int last_gradient = 0;
-  int bests[3] = {0};
-  int bests_vals[3] = {0};
-
-
-  int bpms_max[101];
-  int bpms_min[101];
-  int bpms_pos[101];
-
-  for (int bpm = 80; bpm <= 180; bpm += 1)
+  for (int bpm = min_bpm; bpm <= max_bpm; bpm++)
   {
-      //  Serial.printf("----------- %d bpm ----------\n", bpm);
-      int max_phase_pos = 0;
-      int max_phase_val = 0;
-      int min_phase_val = 0;
+    const float beat_stride = fsamp * 60.0 / bpm;
 
-      const float beat_stride = fsamp * 60.0 / bpm;
+    int phase, bmax, bmin;
+    correlate_beats( powers, num_powers, beat_stride, phase, bmax, bmin );
 
-      correlate_beats( powers, num_powers, beat_stride, max_phase_pos, max_phase_val, min_phase_val );
-      //Serial.printf("%3d bpm - %d - %d at %d\n", bpm, min_phase_val, max_phase_val, max_phase_pos);   // human-readable
-      //Serial.printf("%d, %d,%d\n", min_phase_val, max_phase_val, max(0, max_phase_val-min_phase_val));   // graphy
+    bpms_pos[bpm-min_bpm] = phase;
+    bpms_val[bpm-min_bpm] = max(0, bmax-bmin);
 
-      bpms_min[ bpm - 80 ] = min_phase_val;
-      bpms_max[ bpm - 80 ] = max_phase_val;
-      bpms_pos[ bpm - 80 ] = max_phase_pos;
+    //Serial.printf("%3d bpm - %d - %d at %d\n", bpm, bmin, bmax, phase);   // human
+    //Serial.printf("%d, %d,%d\n", bmin, bmax, max(0, bmax-bmin));          // graph
   }
 
-#if 0
-  int avav = 0;
-  for (int i = 0; i < 101; i++) // nice for the Arduino graph :)
-    avav += max((int)0, bpms_max[i] - bpms_min[i]);
-  avav /= 101;
+  // ----------------------------------
 
+  const int num_peaks = 3;
+  int peak_bpms[ num_peaks ];
+  find_peaks( bpms_val, num_bpms, &peak_bpms[0], num_peaks ); // reverse order
 
-  for (int i = 0; i < 95; i++) // nice for the Arduino graph :)
-    Serial.printf("%.0f, %0.f\n ", bpms_max[i], max((int)0.0, bpms_max[i]-bpms_min[i]-avav));
+  Serial.printf("Best BPMs: %3d, %3d, %3d\n", peak_bpms[2]+min_bpm, peak_bpms[1]+min_bpm, peak_bpms[0]+min_bpm );  // human
 
-  for (int i = 0; i < 5; i++)
-    Serial.println("0,0");
-#endif
-
-  (void)bpms_min;
-  (void)bpms_max;
-  (void)bpms_pos;
-
-#if 0
-      if (best_phase_sum > best_bpm_sum)
-      {
-        best_bpm_sum = best_phase_sum;
-        best_bpm_phase = best_phase;
-        best_bpm = bpm;
-      }
-
-
-      int this_gradient = best_phase_sum - last_val;
-      if (last_gradient > 0 && this_gradient <= 0)
-      {
-          // last was local peak
-          int peak_bpm = bpm - 1;
-          int peak_val = last_val;
-
-          if (peak_val >= bests_vals[0])
-          {
-            bests[2] = bests[1];
-            bests[1] = bests[0];
-            bests[0] = peak_bpm;
-            bests_vals[2] = bests_vals[1];
-            bests_vals[1] = bests_vals[0];
-            bests_vals[0] = peak_val;
-          }
-          else if (peak_val >= bests_vals[1])
-          {
-            bests[2] = bests[1];
-            bests[1] = peak_bpm;
-            bests_vals[2] = bests_vals[1];
-            bests_vals[1] = peak_val;
-          }
-          else if (peak_val > bests_vals[2])
-          {
-            bests[2] = peak_bpm;
-            bests_vals[2] = peak_val;
-          }
-      }
-      last_val = best_phase_sum;
-      last_gradient = this_gradient;
-
-      bpms[bpm-80] = best_phase_sum;
-      bpms_n[bpm-80] = phases[ (best_bpm_phase + num_phases / 2)%num_phases ];
-
+  #if 0 // graph
+  for (int i = 0; i < num_bpms; i++)
+  {
+    int x = 0;
+    for (int p = 0; p < num_peaks; p++)
+      if (i == peak_bpms[p])
+        x = bpms_val[i];
+    Serial.printf("%d, %d\n", bpms_val[i], x );
   }
+  Serial.println("0,0");
+  Serial.println("0,0");
+  Serial.println("0,0");
+  Serial.println("0,0");
+  #endif
+
+
+
+#if 0
 
 
 
@@ -508,12 +485,12 @@ void find_beats( const int32_t powers[], const int num_powers, const float fsamp
 #endif
 
   int best_bpm = 0;
-  int best_bpm_val = bpms_max[0];
+  int best_bpm_val = bpms_val[0];
   int best_bpm_pos = bpms_pos[0];
 
   for (int i = 0; i < 101; i++)
   {
-    int t = bpms_max[i];//max((int)0.0, bpms_max[i]-bpms_min[i]);
+    int t = bpms_val[i];//max((int)0.0, bpms_max[i]-bpms_min[i]);
     if (t > best_bpm_val)
     {
       best_bpm_val = t;
@@ -745,7 +722,7 @@ void vu_task_fn( void* vu_x )
         long start = millis();
         find_beats( powers2, num_powers, fsamp );
         long end = millis();
-        Serial.printf("find_beats() took %ld ms\n", end-start );
+        //Serial.printf("find_beats() took %ld ms\n", end-start );
           // 1 second of window takes approximately 8ms of processing
 
         memmove(&powers[0], &powers[window_length/4], (num_powers-window_length/4)*sizeof(int32_t));
