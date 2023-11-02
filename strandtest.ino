@@ -451,66 +451,19 @@ void find_beats( const int32_t powers[], const int num_powers, const float fsamp
   #endif
 
 
+  int best_bpm = peaks[0] + min_bpm;
 
+  const float beat_stride = fsamp * 60.0 / best_bpm;
+  const int beat_pos = bpms_pos[best_bpm-min_bpm];
+    // how far back from the end; ie a smaller value means a more recent beat
+    // the reported phase really is only integer accuracy, even though it was calculated from floats
+
+  Serial.printf("beat stride %f, pos is %d\n", beat_stride, beat_pos );
+  Serial.printf("next should be %f; currently is %d\n", beat_stride - beat_pos, global_next_beat );
+
+  global_beat_int = (int)(beat_stride + 0.5);
+  global_next_beat = beat_stride - beat_pos;
 #if 0
-
-
-
-  int av_sum = 0.0;
-  for (auto i : bpms)
-    av_sum += i;
-
-  av_sum /= (sizeof(bpms)/sizeof(bpms[0]));
-
-#if 1
-  for (int i = 0; i < 101; i++)
-    Serial.printf("%.0f, %0.f, %.0f\n ", bpms[i], bpms_n[i], bpms[i]-bpms_n[i]);
-  Serial.println("0,0,0");
-  Serial.println("0,0,0");
-  Serial.println("0,0,0");
-  Serial.println("0,0,0");
-  #else
-  Serial.printf("Best %d bpm with phase %d - conf %.2f\n", best_bpm, best_bpm_phase, best_bpm_sum/1000 );
-  Serial.printf(" -- %d (%.0f) >= %d (%.0f) >= %d (%.0f)\n", bests[0], bests_vals[0], bests[1], bests_vals[1], bests[2], bests_vals[2] );
-#endif
-  int best_best = bests[0];
-  if (bests[1] > best_best) best_best = bests[1];
-  if (bests[2] > best_best) best_best = bests[2];
-
-  static int av_best = best_best;
-  av_best = (31 * av_best + best_best) / 32;
-
-//  Serial.printf(" ---- best_best %d,  av %.1f\n", best_best, av_best);
-
-#endif
-
-  int best_bpm = 0;
-  int best_bpm_val = bpms_val[0];
-  int best_bpm_pos = bpms_pos[0];
-
-  for (int i = 0; i < 101; i++)
-  {
-    int t = bpms_val[i];//max((int)0.0, bpms_max[i]-bpms_min[i]);
-    if (t > best_bpm_val)
-    {
-      best_bpm_val = t;
-      best_bpm_pos = bpms_pos[i];
-      best_bpm = i;
-    }
-  }
-
-  best_bpm += 80;
-
-  int beat_interval = (fsamp * 60 + best_bpm/2 ) / best_bpm;
-
-  int bump_pos = 0;
-  for (int i = 0; true; i++)
-  {
-      bump_pos  = i * fsamp * 60 / best_bpm + best_bpm_pos;
-      if (bump_pos > num_powers)
-        break;
-  }
-  bump_pos -= num_powers;
 
   //Serial.printf( "best bpm: %d  %6.0f  next is %d -> %d, interval %d\n",
   //  best_bpm, best_bpm_val, global_next_beat, bump_pos, beat_interval);
@@ -580,6 +533,7 @@ void find_beats( const int32_t powers[], const int num_powers, const float fsamp
 //  (void)best_bpm;
 //  (void)best_bpm_phase;
 //  (void)bpms_n;
+#endif
 }
 
 
