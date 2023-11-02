@@ -27,16 +27,13 @@ public:
       my_vu_decay++;
     }
 
+    if (beat_sustain > 0)
+      beat_sustain--;
+  }
 
-    if (global_beat != last_global_beat)
-    {
-      last_global_beat = global_beat;
-      beat_sustain = 16;
-    }
-    else if (beat_sustain > 0)
-    {
-    beat_sustain--;
-    }
+  virtual void beat( )
+  {
+    beat_sustain = 16;
   }
 
   virtual uint32_t pixel( unsigned int i )

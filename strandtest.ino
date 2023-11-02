@@ -43,7 +43,6 @@ ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
 
 // ----------------------------------------------------------------------------
 
-int global_beat = 0; // counter
 int global_vu = 0;
 
 int global_battery_mv = 0;
@@ -80,6 +79,7 @@ BrightnessPattern brightness_pattern;
 void new_pattern( PixelPattern* next, bool fast = false );
 void new_pattern( PixelPattern* next, bool fast );
   // not sure why, but this prototype doesn't otherwise get picked up.
+void pattern_beat();
 
 // ------------------------------------
 
@@ -576,7 +576,7 @@ void update_beat( )
   }
   else
   {
-    global_beat++;
+    pattern_beat();
     global_next_beat = global_beat_int;
   }
 }

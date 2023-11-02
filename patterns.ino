@@ -61,6 +61,12 @@ void new_pattern( PixelPattern* next, bool fast )
   }
 }
 
+void pattern_beat( )
+{
+  curr_pattern->beat();
+  if (prev_pattern != curr_pattern)
+    prev_pattern->beat();
+}
 
 void cycle_pattern( )
 {

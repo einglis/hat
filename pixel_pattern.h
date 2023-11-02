@@ -12,8 +12,9 @@
 class PixelPattern
 {
 public:
-  virtual void advance( int inc = 1 ) = 0;
   virtual uint32_t pixel( unsigned int i ) = 0;
+  virtual void advance( int inc = 1 ) = 0;
+  virtual void beat() { }
   virtual void activate() { }
   virtual void deactivate() { }
   virtual int interval_ms() { return 10; }
