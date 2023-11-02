@@ -314,10 +314,13 @@ int correlate_beats( const int powers[], const int num_powers, const float beat_
   const int bump_width = 8;
   static int bump[ bump_width ] = { 0 };
 
-  if (bump[0] == 0) // first time
+  static bool first_time = true;
+  if (first_time)
+  {
     for (int i = 0; i < bump_width; i++)
       bump[i] = 255 * sin( 2*M_PI * (i + 0.5) / bump_width / 2 );
-        // this would probably work as a square rather than half sine, but it's fine for now.
+    first_time = false;
+  }
 
 
   const int num_phases = min( 32, (int)beat_stride ); // avoid too much work at low bpms
@@ -745,9 +748,8 @@ void vu_task_fn( void* vu_x )
         Serial.printf("find_beats() took %ld ms\n", end-start );
           // 1 second of window takes approximately 8ms of processing
 
-        memmove(&powers[window_length/4], &powers[0], (num_powers-window_length/4)*sizeof(int32_t));
+        memmove(&powers[0], &powers[window_length/4], (num_powers-window_length/4)*sizeof(int32_t));
         num_powers -= window_length / 4;
-        num_powers = 0;
       }
 
 
