@@ -375,20 +375,20 @@ void find_peaks( int vals[], const int num_vals, int peaks[], const int num_peak
 {
   int pvals[ num_peaks ] = { 0 };
 
-  for (int i = 1; i < num_vals - 1; i++)
+  for (int i = 1; i < num_vals-1; i++)
   {
     const int prev_gradient = vals[i] - vals[i-1];
     const int next_gradient = vals[i+1] - vals[i];
 
     if (prev_gradient >= 0 && next_gradient < 0) // peak or end of plateau
     {
-      if (vals[i] > pvals[0])
+      if (vals[i] > pvals[num_peaks-1])
       {
-        peaks[0] = i; // new entry, at least better than previous worst
-        pvals[0] = vals[i];
-        for (int p = 1; p < num_peaks; p++) // bubble into position; fine for the small lists we're using
+        peaks[num_peaks-1] = i; // new entry, at least better than previous worst
+        pvals[num_peaks-1] = vals[i];
+        for (int p = num_peaks-1; p > 0; p--) // bubble into position; fine for the small lists we're using
         {
-          if (pvals[p] < pvals[p-1])
+          if (pvals[p] > pvals[p-1])
           {
             std::swap( peaks[p], peaks[p-1] );
             std::swap( pvals[p], pvals[p-1] );
@@ -430,17 +430,17 @@ void find_beats( const int32_t powers[], const int num_powers, const float fsamp
   // ----------------------------------
 
   const int num_peaks = 3;
-  int peak_bpms[ num_peaks ];
-  find_peaks( bpms_val, num_bpms, &peak_bpms[0], num_peaks ); // reverse order
+  int peaks[ num_peaks ]; // strongest bpms
+  find_peaks( bpms_val, num_bpms, &peaks[0], num_peaks );
 
-  Serial.printf("Best BPMs: %3d, %3d, %3d\n", peak_bpms[2]+min_bpm, peak_bpms[1]+min_bpm, peak_bpms[0]+min_bpm );  // human
+  Serial.printf("Best BPMs: %3d, %3d, %3d\n", peaks[0]+min_bpm, peaks[1]+min_bpm, peaks[2]+min_bpm );  // human
 
   #if 0 // graph
   for (int i = 0; i < num_bpms; i++)
   {
     int x = 0;
     for (int p = 0; p < num_peaks; p++)
-      if (i == peak_bpms[p])
+      if (i == peaks[p])
         x = bpms_val[i];
     Serial.printf("%d, %d\n", bpms_val[i], x );
   }
