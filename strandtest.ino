@@ -303,11 +303,6 @@ void loop() { }
 
 // ----------------------------------------------------------------------------
 
-int global_next_beat = 100;  // not actually global
-int global_beat_int = 100;   // not actually global
-
-
-
 int correlate_beats( const int powers[], const int num_powers, const float beat_stride,
   int& max_phase_pos, int& max_phase_val, int& min_phase_val )
 {
@@ -404,6 +399,13 @@ void find_peaks( int vals[], const int num_vals, int peaks[], const int num_peak
 }
 
 
+
+int global_curr_beat = 0;
+float global_next_beat = 0.0;
+float global_beat_inc = 100.0;
+float global_beat_adj = 0.0;
+
+
 void find_beats( const int32_t powers[], const int num_powers, const float fsamp )
 {
   const int min_bpm =  80;
@@ -458,11 +460,25 @@ void find_beats( const int32_t powers[], const int num_powers, const float fsamp
     // how far back from the end; ie a smaller value means a more recent beat
     // the reported phase really is only integer accuracy, even though it was calculated from floats
 
-  Serial.printf("beat stride %f, pos is %d\n", beat_stride, beat_pos );
-  Serial.printf("next should be %f; currently is %d\n", beat_stride - beat_pos, global_next_beat );
+  float planned_next = beat_stride - beat_pos;
+  if (planned_next <= 0)
+    planned_next += beat_stride;
 
-  global_beat_int = (int)(beat_stride + 0.5);
-  global_next_beat = beat_stride - beat_pos;
+  const float expected_next = global_next_beat - global_curr_beat;
+
+  float error = expected_next - planned_next; // positive means expected beat is too slow;
+  if (error > beat_stride/2) // probably too early, in fact
+    error -= beat_stride;
+  else if (error < -beat_stride/2)
+    error += beat_stride;
+
+
+  Serial.printf("beat stride %f, pos is %d\n", beat_stride, beat_pos );
+  Serial.printf("next should be %f; currently is %f - error %f\n", planned_next, expected_next, error );
+
+  global_beat_inc = beat_stride;
+  global_beat_adj = -error / 2;
+  //global_next_beat = beat_stride - beat_pos;
 #if 0
 
   //Serial.printf( "best bpm: %d  %6.0f  next is %d -> %d, interval %d\n",
@@ -570,14 +586,26 @@ int32_t subtract_average( int32_t* src, int32_t* dst, int num )
 
 void update_beat( )
 {
-  if (global_next_beat > 0)
+  global_curr_beat++;
+
+  if (global_curr_beat > global_next_beat + 100)
   {
-    global_next_beat--;
+    Serial.println("resync");
+    global_next_beat = global_curr_beat;
   }
-  else
+
+  if (global_curr_beat >= global_next_beat)
   {
     pattern_beat();
-    global_next_beat = global_beat_int;
+    global_next_beat += global_beat_inc + global_beat_adj;
+    global_beat_adj = 0; // apply only once
+  }
+
+  // keep things in a plausible range
+  if (global_curr_beat > 2000)
+  {
+    global_curr_beat -= 1000;
+    global_next_beat -= 1000;
   }
 }
 
@@ -663,8 +691,14 @@ void vu_task_fn( void* vu_x )
       chunk_fill = 0; // reset
       power_acc = 0; // reset
 
+      update_beat();
+        // beat estimation has a chunk_size'd resolution, so update once a chunk
+        // do it before the time-consuming bits, just in case
+
       if (num_powers == window_length) // accrued a full window
       {
+
+
         int av = subtract_average( powers, powers2, num_powers );
         //Serial.printf("average %d\n", av);
 
@@ -684,8 +718,6 @@ void vu_task_fn( void* vu_x )
       }
 
 
-      update_beat();
-        // beat estimation has a chunk_size'd resolution, so update once a chunk
 
       num_loops++;
         // count full chunks as a loop, rather than sub-chunks, because that's what we really care about
