@@ -478,78 +478,6 @@ void find_beats( const int32_t powers[], const int num_powers, const float fsamp
 
   global_beat_inc = beat_stride;
   global_beat_adj = -error / 2;
-  //global_next_beat = beat_stride - beat_pos;
-#if 0
-
-  //Serial.printf( "best bpm: %d  %6.0f  next is %d -> %d, interval %d\n",
-  //  best_bpm, best_bpm_val, global_next_beat, bump_pos, beat_interval);
-
-
-
-  //int next_curr = global_next_beat + global_beat_int;
-  //int next_next = bump_pos + beat_interval;
-  int max_int = max(global_beat_int, beat_interval);
-
-  int error = (bump_pos - global_next_beat + max_int) % max_int;
-    // +ve => running fast
-
-  if (error > max_int/2)
-    error -= max_int;
-
-  if (error > 0)
-  {
-    //Serial.printf("Running too fast %d\n", error);
-    if (error > 2)
-      error *= 0.3;
-    else
-      error = 1;
-  }
-  else if (error < 0)
-  {
-    //Serial.printf("Running too slow %d\n", error);
-    if (error < -2)
-      error *= 0.3;
-    else
-      error = -1;
-  }
-
-
-  // if (bump_pos > global_next_beat)
-  // {
-  //   int phase_error = bump_pos - global_next_beat;
-  //   int phase_error__ = (phase_error < 2)? phase_error : phase_error * 0.7;
-  //   Serial.printf("Running too fast %d %d\n", phase_error, phase_error__);
-  //   global_next_beat += phase_error; // extra delay
-  // }
-  // else if (bump_pos < global_next_beat)
-  // {
-  //   int phase_error = global_next_beat - bump_pos;
-  //   int phase_error__ = (phase_error < 2)? phase_error : phase_error * 0.7;
-  //   Serial.printf("Running too slow %d %d\n", phase_error, phase_error__);
-  //   if (global_next_beat > phase_error)
-  //     global_next_beat -= phase_error; // reduce delay
-  // }
-
-
-  //Serial.printf("new int %d, curr int %d\n", beat_interval, global_beat_int);
-  int beat_err = beat_interval - global_beat_int;
-  if (beat_err > 1 || beat_err < -1)
-    beat_err *= 0.7;
-
-  global_beat_int += beat_err;
-
-
-
-  if (global_beat_int + error > 0)
-    global_beat_int += error;
-
-
-  //Serial.printf("finally %d\n", global_beat_int);
-
-//  (void)best_bpm;
-//  (void)best_bpm_phase;
-//  (void)bpms_n;
-#endif
 }
 
 
@@ -581,9 +509,6 @@ int32_t subtract_average( int32_t* src, int32_t* dst, int num )
   return power_av;
 }
 
-
-
-
 void update_beat( )
 {
   global_curr_beat++;
@@ -609,6 +534,7 @@ void update_beat( )
   }
 }
 
+// ----------------------------------------------------------------------------
 
 TaskHandle_t vu_task;
 void vu_task_fn( void* vu_x )
@@ -697,8 +623,6 @@ void vu_task_fn( void* vu_x )
 
       if (num_powers == window_length) // accrued a full window
       {
-
-
         int av = subtract_average( powers, powers2, num_powers );
         //Serial.printf("average %d\n", av);
 
@@ -717,12 +641,9 @@ void vu_task_fn( void* vu_x )
         num_powers -= window_length / 4;
       }
 
-
-
       num_loops++;
         // count full chunks as a loop, rather than sub-chunks, because that's what we really care about
     }
-
 
 #if 0
     long now = millis();
