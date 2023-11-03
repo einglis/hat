@@ -43,7 +43,7 @@ public:
 
 
     if (i < 4 || i >= NUM_PIXELS - 4)
-      if (beat_sustain)
+      if (beat_sustain && my_vu > 10) // vu fudge
         return beat_sustain*0x0f0f0f;
 
 
