@@ -57,16 +57,11 @@ static std::vector< PixelPattern* >pixel_patterns;
 CycleRainbowPattern rainbow1;
 MonoRainbowPattern rainbow2;
 
-#include "pixel_patterns/colour_random.h"
-ColourRandomPattern random_colours;
+#include "pixel_patterns/kitt.h"
+KittPattern kitt;
 
 #include "pixel_patterns/snakes.h"
 SnakesPattern snakes( NUM_PIXELS );
-
-#include "pixel_patterns/sparkle.h"
-SparklePattern sparkle_white;
-SparklePattern sparkle_red( 0x010000 );
-SparklePattern sparkle_yellow( 0x010100 );
 
 #include "pixel_patterns/fft.h"
 FFTPattern fft_basic;
@@ -265,13 +260,10 @@ void setup()
   strip.show();
 
   pixel_patterns.push_back( &rainbow1 );
-  pixel_patterns.push_back( &fft_basic );
-//  pixel_patterns.push_back( &rainbow2 );
   pixel_patterns.push_back( &snakes );
-//pixel_patterns.push_back( &random_colours );
-//pixel_patterns.push_back( &sparkle_white );
-//pixel_patterns.push_back( &sparkle_red );
-//pixel_patterns.push_back( &sparkle_yellow );
+  pixel_patterns.push_back( &rainbow2 );
+  pixel_patterns.push_back( &fft_basic );
+  pixel_patterns.push_back( &kitt );
 
   pixel_ticker.attach_ms( pixel_ticker_interval_ms, pixel_ticker_fn );
 

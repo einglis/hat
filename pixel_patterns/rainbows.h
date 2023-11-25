@@ -38,6 +38,8 @@ class MonoRainbowPattern : public PixelPattern
 {
 public:
   MonoRainbowPattern() : j( 0 ) { }
+  virtual const char* name() { return "Mono rainbow"; }
+  virtual int interval_ms() { return 500; }
 
   virtual void advance( int inc )
   {
