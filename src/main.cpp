@@ -1,10 +1,9 @@
-
 #include <Adafruit_NeoPixel.h>
 #include <AudioTools.h>
 #include "esp_adc_cal.h"
-#include <vector>
 
 #include "button.h"
+#include "pattern_manager.h"
 
 namespace outputs {
   enum {
@@ -50,9 +49,6 @@ int global_battery_charge = 0; // percentage
 
 // ----------------------------------------------------------------------------
 
-#include "pixel_pattern.h"
-static std::vector< PixelPattern* >pixel_patterns;
-
 #include "pixel_patterns/rainbows.h"
 CycleRainbowPattern rainbow1;
 MonoRainbowPattern rainbow2;
@@ -66,15 +62,9 @@ SnakesPattern snakes( NUM_PIXELS );
 #include "pixel_patterns/fft.h"
 FFTPattern fft_basic;
 
-
 #include "pixel_patterns/specials.h"
 BatteryDeadPattern dead_battery;
 BrightnessPattern brightness_pattern;
-
-void new_pattern( PixelPattern* next, bool fast = false );
-void new_pattern( PixelPattern* next, bool fast );
-  // not sure why, but this prototype doesn't otherwise get picked up.
-void pattern_beat();
 
 // ------------------------------------
 
@@ -232,6 +222,8 @@ void button_fn( ButtonInput::Event e, int count )
 }
 
 // ----------------------------------------------------------------------------
+
+void start_vu_task( ); // lazy
 
 void setup()
 {

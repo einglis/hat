@@ -1,5 +1,11 @@
+#include <Ticker.h>
+#include <vector>
 
-// NOTE: hideously copied from Simple Node and thence hacked.
+#include "pattern_manager.h"
+
+std::vector< PixelPattern* >pixel_patterns;
+
+
 
 class DummyPattern : public PixelPattern
 {
