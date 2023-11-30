@@ -75,7 +75,7 @@ const int pixel_ticker_interval_ms = 3;
 
 void pixel_ticker_fn( )
 {
-  pixels_update( strip, pixel_ticker_interval_ms );
+  patterns::update_strip( strip, pixel_ticker_interval_ms );
   strip.show();
 
   #if 0
@@ -134,7 +134,7 @@ void battery_ticker_fn( )
 
     mic_enable( false ); // mic off
     button_enable( false ); // lazy way to prevent user mode changes
-    new_pattern( &dead_battery, true /*fast transition*/ );
+    patterns::force_new( &dead_battery, true /*fast transition*/ );
       // obviously leave LEDs on to show this.
 
     battery_ticker.attach( battery_ticker_interval_sec, []()  // can't use delay() here.
@@ -188,12 +188,12 @@ void button_fn( ButtonInput::Event e, int count )
         pixels_enable( true );
         // fallthrough
       case ModeBright:
-        cycle_pattern();
+        patterns::user_cycle();
         hat_mode = ModeCycle;
         break;
 
       case ModeCycle:
-        new_pattern( &brightness_pattern, true /*fast transition*/ );
+        patterns::force_new( &brightness_pattern, true /*fast transition*/ );
         hat_mode = ModeBright;
         break;
 
@@ -205,7 +205,7 @@ void button_fn( ButtonInput::Event e, int count )
     switch (hat_mode)
     {
       case ModeCycle:
-        cycle_pattern();
+        patterns::user_cycle();
         break;
 
       case ModeBright:
@@ -251,11 +251,11 @@ void setup()
   strip.clear();
   strip.show();
 
-  pixel_patterns.push_back( &rainbow1 );
-  pixel_patterns.push_back( &snakes );
-  pixel_patterns.push_back( &rainbow2 );
-  pixel_patterns.push_back( &fft_basic );
-  pixel_patterns.push_back( &kitt );
+  patterns::add_to_cycle( &rainbow1 );
+  patterns::add_to_cycle( &snakes );
+  patterns::add_to_cycle( &rainbow2 );
+  patterns::add_to_cycle( &fft_basic, false /*don't auto cycle*/ );
+  patterns::add_to_cycle( &kitt );
 
   pixel_ticker.attach_ms( pixel_ticker_interval_ms, pixel_ticker_fn );
 
@@ -505,7 +505,7 @@ void update_beat( )
 
   if (global_curr_beat >= global_next_beat)
   {
-    pattern_beat();
+    patterns::beat();
     global_next_beat += global_beat_inc + global_beat_adj;
     global_beat_adj = 0; // apply only once
   }

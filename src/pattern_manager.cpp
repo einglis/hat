@@ -3,9 +3,7 @@
 
 #include "pattern_manager.h"
 
-std::vector< PixelPattern* >pixel_patterns;
-
-
+namespace {
 
 class DummyPattern : public PixelPattern
 {
@@ -15,6 +13,8 @@ public:
   virtual const char* name( ) { return "dummy"; }
 };
 DummyPattern dummy;
+
+std::vector< PixelPattern* >cycle_patterns;
 
 //-------------------------------------
 
@@ -53,8 +53,11 @@ void transition_ticker_fn( )
     }
   }
 }
+} // anon
 
-void new_pattern( PixelPattern* next, bool fast )
+namespace patterns {
+
+void force_new( PixelPattern* next, bool fast )
 {
   if (next)
   {
@@ -67,17 +70,17 @@ void new_pattern( PixelPattern* next, bool fast )
   }
 }
 
-void pattern_beat( )
+void beat( )
 {
   curr_pattern->beat();
   if (prev_pattern != curr_pattern)
     prev_pattern->beat();
 }
 
-void cycle_pattern( )
+void user_cycle( )
 {
-  auto it = pixel_patterns.begin();
-  for ( ; it != pixel_patterns.end(); ++it)
+  auto it = cycle_patterns.begin();
+  for ( ; it != cycle_patterns.end(); ++it)
   {
     if (*it == curr_pattern)
     {
@@ -86,14 +89,22 @@ void cycle_pattern( )
     }
   }
 
-  if (it == pixel_patterns.end())
-    it = pixel_patterns.begin();
+  if (it == cycle_patterns.end())
+    it = cycle_patterns.begin();
 
-  new_pattern( *it );
+  force_new( *it );
 }
+
+void add_to_cycle( PixelPattern* p, bool )
+{
+  cycle_patterns.push_back( p );
+}
+
+} // patterns
 
 // ------------------------------------
 
+namespace {
 uint32_t mix( uint32_t a, uint32_t b, unsigned int amnt )
 {
     uint32_t x = 0;
@@ -110,8 +121,11 @@ uint32_t mix( uint32_t a, uint32_t b, unsigned int amnt )
 
     return x;
 }
+} // anon
 
-bool pixels_update( Adafruit_NeoPixel &strip, int interval_ms )
+namespace patterns {
+
+void update_strip( Adafruit_NeoPixel &strip, int interval_ms )
 {
   static bool first_time = true;
   if (first_time)
@@ -142,9 +156,9 @@ bool pixels_update( Adafruit_NeoPixel &strip, int interval_ms )
               strip.setPixelColor( i, pattern->pixel(i) );
       }
   }
-
-  return true; // currently ignored
 }
+
+} // patterns
 
 // ----------------------------------------------------------------------------
 
