@@ -3,7 +3,7 @@
 
 #include "pattern_manager.h"
 
-namespace {
+//namespace {
 
 class DummyPattern : public PixelPattern
 {
@@ -56,7 +56,7 @@ void transition_ticker_fn( )
     }
   }
 }
-} // anon
+//} // anon
 
 namespace patterns {
 

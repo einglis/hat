@@ -5,6 +5,8 @@
 
 #include "pixel_pattern.h"
 
+extern PixelPattern* curr_pattern;
+
 namespace patterns
 {
   void force_new( PixelPattern* next, bool fast = false );

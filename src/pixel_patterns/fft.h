@@ -5,7 +5,7 @@
 class FFTPattern : public PixelPattern
 {
 public:
-  FFTPattern( ) { }
+  FFTPattern( ) : marker{false} { }
   virtual const char* name() { return "VU and beat"; }
 
   virtual void advance( int /*inc*/ )
@@ -42,10 +42,17 @@ public:
       // but actually, pixels 28 and 29 straddle the centre line
 
 
-    if (i < 4 || i >= NUM_PIXELS - 4)
-      if (beat_sustain && my_vu > 10) // vu fudge
-        return beat_sustain*0x0f0f0f;
-
+    if (marker)
+    {
+      if (i == global_power_shift || i == NUM_PIXELS - global_power_shift - 1)
+        return 0xffffff;
+    }
+    else
+    {
+      if (i < 4 || i >= NUM_PIXELS - 4)
+        if (beat_sustain && my_vu > 10) // vu fudge
+          return beat_sustain*0x0f0f0f;
+    }
 
     int pos = 0;
 
@@ -65,11 +72,15 @@ public:
       col = bright * 0x010100; // yellow
 
 
-
     if (my_vu && pos < (my_vu-1))
       return col;
     else
       return 0;
+  }
+
+  void show_marker( bool enable )
+  {
+    marker = enable;
   }
 
 private:
@@ -77,4 +88,5 @@ private:
   int my_vu_decay;
   int last_global_beat;
   int beat_sustain;
+  bool marker;
 };

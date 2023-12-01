@@ -43,6 +43,7 @@ ButtonInput button( [](){ return digitalRead( inputs::button_pin ); } );
 // ----------------------------------------------------------------------------
 
 int global_vu = 0;
+int global_power_shift = 0;
 
 int global_battery_mv = 0;
 int global_battery_charge = 0; // percentage
@@ -157,7 +158,7 @@ const int brightnesses[] = { 16, 32, 64, 128, 4, 8 };
 const int num_brightnesses = sizeof(brightnesses) / sizeof(brightnesses[0]);
 int curr_brightness = 0;
 
-enum HatMode { ModeOff, ModeCycle, ModeBright, ModeDead };
+enum HatMode { ModeOff, ModeCycle, ModeBright, ModeVol, ModeDead };
 HatMode hat_mode = ModeOff;
 
 
@@ -171,6 +172,7 @@ void button_fn( ButtonInput::Event e, int count )
     {
       case ModeCycle:
       case ModeBright:
+      case ModeVol:
         pixels_enable( false );
         mic_enable( false );
         hat_mode = ModeOff;
@@ -187,14 +189,27 @@ void button_fn( ButtonInput::Event e, int count )
         mic_enable( true );
         pixels_enable( true );
         // fallthrough
+
       case ModeBright:
         patterns::user_cycle();
+        // fallthrough
+
+      case ModeVol:
+        fft_basic.show_marker(false);
         hat_mode = ModeCycle;
         break;
 
       case ModeCycle:
-        patterns::force_new( &brightness_pattern, true /*fast transition*/ );
-        hat_mode = ModeBright;
+        if (curr_pattern == &fft_basic)
+        {
+          fft_basic.show_marker(true);
+          hat_mode = ModeVol;
+        }
+        else
+        {
+          patterns::force_new( &brightness_pattern, true /*fast transition*/ );
+          hat_mode = ModeBright;
+        }
         break;
 
       default: break;
@@ -212,6 +227,13 @@ void button_fn( ButtonInput::Event e, int count )
         curr_brightness = (curr_brightness + 1) % num_brightnesses;
         Serial.printf( "Setting brightness to %d\n", brightnesses[curr_brightness] );
         strip.setBrightness( brightnesses[curr_brightness] );
+        break;
+
+      case ModeVol:
+        global_power_shift++;
+        if (global_power_shift > 10)
+          global_power_shift = 0;
+        Serial.printf( "Setting volume to %0.3f%%\n", 100.0 / (1 << global_power_shift) );
         break;
 
       default: break;
@@ -585,6 +607,8 @@ void vu_task_fn( void* vu_x )
     uint32_t power_sum = 0;
     for (int i = 0; i < sub_chunk_size; i++)
       power_sum += sample_buf[i] * sample_buf[i];
+
+    power_sum >>= global_power_shift;
 
     *((int *)vu_x) = update_vu( power_sum, sub_chunk_size );
 
