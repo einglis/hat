@@ -50,6 +50,9 @@ int global_battery_charge = 0; // percentage
 
 // ----------------------------------------------------------------------------
 
+#include "pixel_patterns/blocks.h"
+BlockPattern blocks1;
+
 #include "pixel_patterns/rainbows.h"
 CycleRainbowPattern rainbow1;
 MonoRainbowPattern rainbow2;
@@ -277,6 +280,7 @@ void setup()
   patterns::add_to_cycle( &snakes );
   patterns::add_to_cycle( &rainbow2 );
   patterns::add_to_cycle( &fft_basic, false /*don't auto cycle*/ );
+  patterns::add_to_cycle( &blocks1, false /*don't auto cycle*/ );
   patterns::add_to_cycle( &kitt );
 
   pixel_ticker.attach_ms( pixel_ticker_interval_ms, pixel_ticker_fn );
