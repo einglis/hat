@@ -27,7 +27,7 @@ https://www.youtube.com/watch?v=0iEVzUgQieM&t=667s
 
 ## Hardware
 ### TinyPico mods
-1. Connecting the built-in battery monitor to a different GPIO to use a different ADC bank to the I2C peripheral
+1. Connecting the built-in battery monitor to a different GPIO to use a different ADC bank than the I2C peripheral
 
 [![pico mods](./resources/tiny_pico_mods_sm.png)](./resources/tiny_pico_mods.png)
 
