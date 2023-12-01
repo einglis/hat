@@ -14,7 +14,10 @@ public:
 };
 DummyPattern dummy;
 
-std::vector< PixelPattern* >cycle_patterns;
+std::vector< std::pair< PixelPattern*, bool > >cycle_patterns;
+
+const int cycle_interval_sec = 60;
+Ticker cycle_ticker;
 
 //-------------------------------------
 
@@ -24,8 +27,8 @@ PixelPattern* next_pattern = curr_pattern;
 
 int transition_count = 0;
 int transition_rate = 1;
-Ticker transition_ticker;
 
+Ticker transition_ticker;
 void transition_ticker_fn( )
 {
   if (transition_count > 0 && transition_count <= transition_rate)
@@ -59,6 +62,8 @@ namespace patterns {
 
 void force_new( PixelPattern* next, bool fast )
 {
+  cycle_ticker.detach();
+
   if (next)
   {
     Serial.printf("new pattern: \"%s\"\n", next->name() );
@@ -77,27 +82,52 @@ void beat( )
     prev_pattern->beat();
 }
 
-void user_cycle( )
+} // patterns
+
+namespace {
+void do_cycle( bool user_cycle = false )
 {
-  auto it = cycle_patterns.begin();
-  for ( ; it != cycle_patterns.end(); ++it)
-  {
-    if (*it == curr_pattern)
-    {
-      ++it;
+  int curr_index = cycle_patterns.size() - 1;
+
+  // try and find the current pattern in the list (it might not be there)
+  // work backwards so if not found, when we then increment, we end up back at the first.
+  for ( ; curr_index >= 0; curr_index--)
+    if (cycle_patterns[curr_index].first == curr_pattern)
       break;
+
+  // find the next pattern (or first if current is not int the cycle)
+  int next_index = (curr_index + 1) % cycle_patterns.size();
+
+  // if this is an auto-cycle, skip any that are not auto.
+  if (!user_cycle)
+  {
+    for (int i = 0; i < cycle_patterns.size(); i++)
+    {
+      if (!cycle_patterns[next_index].second) // not in auto-cycle
+        next_index = (next_index + 1) % cycle_patterns.size(); // skip
+      else
+        break;
     }
   }
 
-  if (it == cycle_patterns.end())
-    it = cycle_patterns.begin();
+  patterns::force_new( cycle_patterns[next_index].first );
 
-  force_new( *it );
+  if (cycle_patterns[next_index].second) // auto_cycle
+    cycle_ticker.once( cycle_interval_sec, [](){ do_cycle(); } );
 }
 
-void add_to_cycle( PixelPattern* p, bool )
+} // anon
+
+namespace patterns {
+
+void add_to_cycle( PixelPattern* p, bool auto_cycle )
 {
-  cycle_patterns.push_back( p );
+  cycle_patterns.push_back( std::make_pair( p, auto_cycle ) );
+}
+
+void user_cycle( )
+{
+  do_cycle( true /*user_cycle*/ );
 }
 
 } // patterns
