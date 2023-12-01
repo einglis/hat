@@ -21,9 +21,9 @@ https://www.youtube.com/watch?v=0iEVzUgQieM&t=667s
 ## Previous hardware
 * **DFRobot** Beetle ESP32 - C3 (RISC-V Core Development Board)
   * https://www.dfrobot.com/product-2566.html
-  * Replaced with the TinyPico when I discovered in one moment that I could use DMA with the I2C peripheral to sample the mic data, and that only the original ESP32 had the relevant hardware support.  So the C3 part had to go.
+  * Replaced with the TinyPico when I discovered in one moment that I could use DMA with the I2C peripheral to sample the mic data, and in the next that only the original ESP32 had the relevant hardware support.  So the C3 part had to go.
 * **IRF520N** N-Channel MOSFET
-  * Driving the LEDs through a P-Channel device gave me high-side switching, which felt like a nice idea.
+  * Driving the LEDs through a P-Channel device gave me high-side switching, which felt fractionally better than low-side with the N-Channel.
 
 ## Hardware
 ### TinyPico mods
